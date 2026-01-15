@@ -64,7 +64,11 @@ func runVulnScan(paths []string) error {
 	}
 
 	logging.Info("Starting vulnerability scan...")
-	logging.Debug("License: %s...", cfg.License[:minInt(8, len(cfg.License))])
+	licenseDisplay := cfg.License
+	if len(licenseDisplay) > 8 {
+		licenseDisplay = licenseDisplay[:8]
+	}
+	logging.Debug("License: %s...", licenseDisplay)
 	logging.Debug("Paths: %v", paths)
 	logging.Debug("Check core: %v", vulnScanCheckCore)
 	logging.Debug("Check plugins: %v", vulnScanCheckPlugins)

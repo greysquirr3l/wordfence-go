@@ -3,6 +3,7 @@ module github.com/nickcampbell/wordfence-go
 go 1.21
 
 require (
+	github.com/dlclark/regexp2 v1.11.5
 	github.com/fatih/color v1.16.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
