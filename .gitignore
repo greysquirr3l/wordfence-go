@@ -1,2 +1,18 @@
 # Reference Projects & Original Sources
 reference_projects/
+
+# Serena
+.serena/
+.mcp.json
+
+#VSCode settings
+.vscode/
+
+# IMPLEMENTATION PLAN (keep)
+IMPLEMENTATION_PLAN.md
+
+# Binaries
+bin/
+wordfence-go
+wordfence
+wordfence-linux-amd64
