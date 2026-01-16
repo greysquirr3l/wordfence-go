@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-01-15
+
+### Changed
+- Updated Go dependencies:
+  - `github.com/fatih/color` v1.16.0 → v1.18.0
+  - `github.com/spf13/cobra` v1.8.0 → v1.10.2
+  - `github.com/spf13/viper` v1.18.2 → v1.21.0
+- Updated GitHub Actions:
+  - `actions/checkout` v4.2.2 → v6.0.1
+  - `actions/setup-go` v5.2.0 → v6.2.0
+  - `ossf/scorecard-action` v2.4.0 → v2.4.3
+  - `github/codeql-action` v3.28.x → v4.31.10
+
 ## [0.1.3] - 2026-01-15
 
 ### Fixed
