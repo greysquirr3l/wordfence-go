@@ -1,0 +1,46 @@
+# https://golangci-lint.run/usage/configuration/
+# https://golangci-lint.run/product/migration-guide/
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  issues-exit-code: 1
+  concurrency: 4
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - goconst
+    - gocyclo
+    - revive
+    - misspell
+    - unparam
+    - prealloc
+    - gosec
+    - bodyclose
+    - noctx
+    - errorlint
+    - wrapcheck
+    - nilnil
+    - sqlclosecheck
+    - dogsled
+    - dupl
+    - durationcheck
+    - thelper
+    - whitespace
+    - asasalint
+    - bidichk
+    - contextcheck
+    - musttag
+    - nakedret
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

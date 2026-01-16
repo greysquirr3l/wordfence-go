@@ -1,4 +1,4 @@
-module github.com/nickcampbell/wordfence-go
+module github.com/greysquirr3l/wordfence-go
 
 go 1.21
 

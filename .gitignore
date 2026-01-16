@@ -16,3 +16,74 @@ bin/
 wordfence-go
 wordfence
 wordfence-linux-amd64
+
+# Embedded rules (fetched at build time, do not commit)
+internal/intel/rules/
+
+# =========================
+# Go
+# =========================
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Go build cache
+go-build/
+
+# =========================
+# macOS
+# =========================
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon must end with two \r
+Icon
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# =========================
+# GitHub
+# =========================
+# GitHub Actions
+.github/workflows/*.log
+
+# GitHub Codespaces
+.devcontainer/
+
+# GitHub CLI
+.github/.gh-resolved-dependencies

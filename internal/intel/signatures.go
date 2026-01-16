@@ -6,14 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/nickcampbell/wordfence-go/internal/api"
 )
 
 // CommonString represents a string shared across multiple signatures
 type CommonString struct {
-	String       string
-	SignatureIDs []int
+	String       string `json:"string"`
+	SignatureIDs []int  `json:"signature_ids"`
 }
 
 // NewCommonString creates a new CommonString
@@ -26,11 +24,11 @@ func NewCommonString(s string) *CommonString {
 
 // Signature represents a malware detection signature
 type Signature struct {
-	ID            int
-	Rule          string // PCRE pattern
-	Name          string
-	Description   string
-	CommonStrings []int // Indices into SignatureSet.CommonStrings
+	ID            int    `json:"id"`
+	Rule          string `json:"rule"` // PCRE pattern
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	CommonStrings []int  `json:"common_strings"` // Indices into SignatureSet.CommonStrings
 }
 
 // NewSignature creates a new Signature
@@ -153,29 +151,33 @@ func (ss *SignatureSet) GetCommonStringsForSignature(sig *Signature) []string {
 	return result
 }
 
-// ParseSignatureSet parses a signature set from the API response
-func ParseSignatureSet(resp *api.GetPatternsResponse) (*SignatureSet, error) {
+// RawSignatureRule contains the parsed fields of a signature rule
+// This is used to avoid import cycles between intel and api packages
+type RawSignatureRule struct {
+	ID             int
+	Type           int    // 0 = malware, non-zero = other
+	Rule           string // PCRE pattern
+	Category       string
+	Description    string
+	Enabled        int // 0 = enabled
+	Name           string
+	LogDescription string
+	CommonStrings  []int
+}
+
+// ParseSignatureSet parses a signature set from raw API response data
+func ParseSignatureSet(commonStrings []string, rules []*RawSignatureRule, updateTime int64) (*SignatureSet, error) {
 	ss := NewSignatureSet()
-	ss.UpdateTime = resp.SignatureUpdateTime
+	ss.UpdateTime = updateTime
 
 	// Parse common strings
-	for _, s := range resp.CommonStrings {
+	for _, s := range commonStrings {
 		ss.CommonStrings = append(ss.CommonStrings, NewCommonString(s))
 	}
 
 	// Parse rules
-	for _, rawRule := range resp.Rules {
-		rule, err := api.ParseSignatureRule(rawRule)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse signature rule: %w", err)
-		}
-
-		// Skip non-malware rules (Type != 0)
-		if rule.Type != 0 {
-			continue
-		}
-
-		// Skip disabled rules (Enabled != 0)
+	for _, rule := range rules {
+		// Skip disabled rules (Enabled != 0 means disabled)
 		if rule.Enabled != 0 {
 			continue
 		}
@@ -203,7 +205,7 @@ func ParseSignatureSet(resp *api.GetPatternsResponse) (*SignatureSet, error) {
 
 // MarshalJSON implements json.Marshaler for SignatureSet
 func (ss *SignatureSet) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
+	data, err := json.Marshal(struct {
 		CommonStrings []*CommonString    `json:"common_strings"`
 		Signatures    map[int]*Signature `json:"signatures"`
 		UpdateTime    int64              `json:"update_time"`
@@ -212,6 +214,10 @@ func (ss *SignatureSet) MarshalJSON() ([]byte, error) {
 		Signatures:    ss.Signatures,
 		UpdateTime:    ss.UpdateTime,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshaling signature set: %w", err)
+	}
+	return data, nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for SignatureSet
@@ -223,7 +229,7 @@ func (ss *SignatureSet) UnmarshalJSON(data []byte) error {
 	}
 
 	if err := json.Unmarshal(data, &v); err != nil {
-		return err
+		return fmt.Errorf("unmarshaling signature set: %w", err)
 	}
 
 	ss.CommonStrings = v.CommonStrings
@@ -231,4 +237,66 @@ func (ss *SignatureSet) UnmarshalJSON(data []byte) error {
 	ss.UpdateTime = v.UpdateTime
 
 	return nil
+}
+
+// ParseRawAPIResponse parses the raw API response format from get_patterns
+// The format is: rules: array of [id, timestamp, rule, description, scope, enabled, category, name, commonStrings[]]
+func ParseRawAPIResponse(data []byte) (*SignatureSet, error) {
+	var resp struct {
+		Rules               []json.RawMessage `json:"rules"`
+		CommonStrings       []string          `json:"commonStrings"`
+		SignatureUpdateTime int64             `json:"signatureUpdateTime"`
+	}
+
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse API response: %w", err)
+	}
+
+	// Convert to RawSignatureRule format
+	rules := make([]*RawSignatureRule, 0, len(resp.Rules))
+	for _, rawRule := range resp.Rules {
+		var arr []json.RawMessage
+		if err := json.Unmarshal(rawRule, &arr); err != nil {
+			continue // Skip malformed rules
+		}
+
+		if len(arr) < 9 {
+			continue
+		}
+
+		rule := &RawSignatureRule{}
+
+		// Parse each field: [id, timestamp, rule, description, scope, enabled, category, name, commonStrings[]]
+		if err := json.Unmarshal(arr[0], &rule.ID); err != nil {
+			continue
+		}
+		// arr[1] is timestamp, skip
+		if err := json.Unmarshal(arr[2], &rule.Rule); err != nil {
+			continue
+		}
+		if err := json.Unmarshal(arr[3], &rule.Description); err != nil {
+			continue
+		}
+		// arr[4] is scope, skip
+		if err := json.Unmarshal(arr[5], &rule.Enabled); err != nil {
+			continue
+		}
+		if err := json.Unmarshal(arr[6], &rule.Category); err != nil {
+			continue
+		}
+		if err := json.Unmarshal(arr[7], &rule.LogDescription); err != nil {
+			continue
+		}
+		if err := json.Unmarshal(arr[8], &rule.CommonStrings); err != nil {
+			rule.CommonStrings = []int{} // Default to empty
+		}
+
+		// The API format uses enabled=0 for enabled, non-zero for disabled
+		// Type is not in this format, default to 0 (malware)
+		rule.Type = 0
+
+		rules = append(rules, rule)
+	}
+
+	return ParseSignatureSet(resp.CommonStrings, rules, resp.SignatureUpdateTime)
 }

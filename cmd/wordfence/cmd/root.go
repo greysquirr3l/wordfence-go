@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nickcampbell/wordfence-go/internal/config"
-	"github.com/nickcampbell/wordfence-go/internal/logging"
+	"github.com/greysquirr3l/wordfence-go/internal/config"
+	"github.com/greysquirr3l/wordfence-go/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -31,7 +31,7 @@ PHP/other malware and WordPress vulnerabilities.
 
 It can scan filesystems for malware signatures and check WordPress
 installations for known vulnerabilities in core, plugins, and themes.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		// Skip config loading for version and help commands
 		if cmd.Name() == "version" || cmd.Name() == "help" {
 			return nil
@@ -58,6 +58,9 @@ installations for known vulnerabilities in core, plugins, and themes.`,
 			cfg.NoColor = noColorFlag
 		}
 		if cmd.Flags().Changed("license") {
+			if licenseFlag == "" {
+				return fmt.Errorf("--license flag cannot be empty")
+			}
 			cfg.License = licenseFlag
 		}
 		if cmd.Flags().Changed("cache-dir") {

@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,15 @@ import (
 
 // LicenseURL is the URL to obtain a Wordfence CLI license
 const LicenseURL = "https://www.wordfence.com/products/wordfence-cli/"
+
+// ErrNoLicenseInEnv indicates no license was found in environment
+var ErrNoLicenseInEnv = errors.New("no license in environment")
+
+// ErrNoLicenseInFile indicates no license was found in config files
+var ErrNoLicenseInFile = errors.New("no license in config files")
+
+// ErrNoLicenseKey indicates no license key was found in file
+var ErrNoLicenseKey = errors.New("no license key in file")
 
 // License represents a Wordfence CLI license
 type License struct {
@@ -41,7 +51,10 @@ func (l *License) IsValid() bool {
 	
 	// Check if it's a valid hex string
 	for _, c := range key {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		isDigit := c >= '0' && c <= '9'
+		isLowerHex := c >= 'a' && c <= 'f'
+		isUpperHex := c >= 'A' && c <= 'F'
+		if !isDigit && !isLowerHex && !isUpperHex {
 			return false
 		}
 	}
@@ -65,7 +78,7 @@ func NewLicenseManager(noc1 *NOC1Client) *LicenseManager {
 func LoadFromEnv() (*License, error) {
 	key := os.Getenv("WORDFENCE_CLI_LICENSE")
 	if key == "" {
-		return nil, nil // No license in env
+		return nil, ErrNoLicenseInEnv
 	}
 	return NewLicense(key), nil
 }
@@ -74,7 +87,7 @@ func LoadFromEnv() (*License, error) {
 func LoadFromFile() (*License, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting user config dir: %w", err)
 	}
 
 	// Check standard config file locations
@@ -94,14 +107,14 @@ func LoadFromFile() (*License, error) {
 		}
 	}
 
-	return nil, nil // No license found
+	return nil, ErrNoLicenseInFile
 }
 
 // loadFromINIFile loads the license from an INI file
 func loadFromINIFile(path string) (*License, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // config file path from known locations
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading file: %w", err)
 	}
 
 	// Simple INI parsing for license key
@@ -116,7 +129,7 @@ func loadFromINIFile(path string) (*License, error) {
 		}
 	}
 
-	return nil, nil
+	return nil, ErrNoLicenseKey
 }
 
 // Validate validates the license against the Wordfence API
@@ -173,6 +186,6 @@ func NewLicenseRequiredError() error {
 
 // IsLicenseRequiredError checks if an error is a LicenseRequiredError
 func IsLicenseRequiredError(err error) bool {
-	_, ok := err.(LicenseRequiredError)
-	return ok
+	var licenseErr LicenseRequiredError
+	return errors.As(err, &licenseErr)
 }

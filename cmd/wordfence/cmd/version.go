@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/nickcampbell/wordfence-go/internal/version"
+	"github.com/greysquirr3l/wordfence-go/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -9,7 +9,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Display version information",
 	Long:  `Display the version of Wordfence CLI and build information.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		version.PrintVersion()
 	},
 }

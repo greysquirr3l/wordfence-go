@@ -1,14 +1,16 @@
 // Package api provides NOC1 API client for Wordfence
-package api
+package api //nolint:revive // api is a well-understood package name for API clients
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
 
-	"github.com/nickcampbell/wordfence-go/internal/logging"
+	"github.com/greysquirr3l/wordfence-go/internal/intel"
+	"github.com/greysquirr3l/wordfence-go/internal/logging"
 )
 
 // NOC1BaseURL is the default NOC1 API base URL
@@ -73,7 +75,7 @@ func (c *NOC1Client) buildQuery(action string, extraParams url.Values) url.Value
 // request makes a request to the NOC1 API
 func (c *NOC1Client) request(ctx context.Context, action string, extraParams url.Values) ([]byte, error) {
 	query := c.buildQuery(action, extraParams)
-	path := "?" + query.Encode()
+	path := "/?" + query.Encode()
 
 	resp, err := c.Get(ctx, path, nil)
 	if err != nil {
@@ -95,7 +97,7 @@ func (c *NOC1Client) requestJSON(ctx context.Context, action string, extraParams
 		ErrorMsg string `json:"errorMsg"`
 	}
 	if err := json.Unmarshal(resp, &errResp); err == nil && errResp.ErrorMsg != "" {
-		return &APIError{
+		return &NOC1Error{
 			Action:  action,
 			Message: errResp.ErrorMsg,
 		}
@@ -108,10 +110,30 @@ func (c *NOC1Client) requestJSON(ctx context.Context, action string, extraParams
 	return nil
 }
 
+// StringBool is a bool that can be unmarshaled from a string or bool
+type StringBool bool
+
+// UnmarshalJSON implements json.Unmarshaler
+func (sb *StringBool) UnmarshalJSON(data []byte) error {
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		*sb = StringBool(b)
+		return nil
+	}
+
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("unmarshaling string bool: %w", err)
+	}
+
+	*sb = StringBool(s == "1" || s == "true")
+	return nil
+}
+
 // PingAPIKeyResponse is the response from ping_api_key
 type PingAPIKeyResponse struct {
-	OK         int  `json:"ok"`
-	IsPaidKey  bool `json:"_isPaidKey"`
+	OK        int        `json:"ok"`
+	IsPaidKey StringBool `json:"_isPaidKey"`
 }
 
 // PingAPIKey validates the license key
@@ -126,7 +148,7 @@ func (c *NOC1Client) PingAPIKey(ctx context.Context) (bool, error) {
 	}
 
 	// Update license paid status
-	c.License.Paid = resp.IsPaidKey
+	c.License.Paid = bool(resp.IsPaidKey)
 
 	return resp.OK == 1, nil
 }
@@ -192,20 +214,20 @@ type GetPatternsResponse struct {
 	Word1               string            `json:"word1"`
 	Word2               string            `json:"word2"`
 	Word3               string            `json:"word3"`
-	IsPaidKey           bool              `json:"_isPaidKey"`
+	IsPaidKey           StringBool        `json:"_isPaidKey"`
 }
 
 // SignatureRule represents a malware signature rule
 type SignatureRule struct {
-	ID            int    // Index 0
-	Type          int    // Index 1 (0 = malware, non-zero = other)
-	Rule          string // Index 2 - PCRE pattern
-	Category      string // Index 3
-	Description   string // Index 4
-	Enabled       int    // Index 5 (0 = enabled)
-	Name          string // Index 6
+	ID             int    // Index 0
+	Type           int    // Index 1 (0 = malware, non-zero = other)
+	Rule           string // Index 2 - PCRE pattern
+	Category       string // Index 3
+	Description    string // Index 4
+	Enabled        int    // Index 5 (0 = enabled)
+	Name           string // Index 6
 	LogDescription string // Index 7
-	CommonStrings []int  // Index 8 - Indices into commonStrings array
+	CommonStrings  []int  // Index 8 - Indices into commonStrings array
 }
 
 // ParseSignatureRule parses a signature rule from JSON array
@@ -262,7 +284,7 @@ func (c *NOC1Client) GetPatterns(ctx context.Context) (*GetPatternsResponse, err
 
 	// Update license paid status
 	if c.License != nil {
-		c.License.Paid = resp.IsPaidKey
+		c.License.Paid = bool(resp.IsPaidKey)
 	}
 
 	return &resp, nil
@@ -276,20 +298,97 @@ func (c *NOC1Client) GetPatternsWithTimeout(ctx context.Context, timeout time.Du
 	return c.GetPatterns(ctx)
 }
 
-// APIError represents an error from the NOC1 API
-type APIError struct {
+// NOC1Error represents an error from the NOC1 API
+type NOC1Error struct {
 	Action  string
 	Message string
 }
 
-func (e *APIError) Error() string {
+func (e *NOC1Error) Error() string {
 	return fmt.Sprintf("NOC1 API error (%s): %s", e.Action, e.Message)
 }
 
-// IsAPIError checks if an error is an APIError
-func IsAPIError(err error) (*APIError, bool) {
-	if apiErr, ok := err.(*APIError); ok {
+// IsNOC1Error checks if an error is an NOC1Error
+func IsNOC1Error(err error) (*NOC1Error, bool) {
+	var apiErr *NOC1Error
+	if errors.As(err, &apiErr) {
 		return apiErr, true
 	}
 	return nil, false
+}
+
+// GetPatternsAsSignatureSet fetches patterns and parses them into a SignatureSet
+func (c *NOC1Client) GetPatternsAsSignatureSet(ctx context.Context) (*intel.SignatureSet, error) {
+	resp, err := c.GetPatterns(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return ParsePatternsResponse(resp)
+}
+
+
+// GetWPFileContent retrieves the correct content for a WordPress file
+func (c *NOC1Client) GetWPFileContent(ctx context.Context, fileType, filePath, coreVersion string, extensionName, extensionVersion string) ([]byte, error) {
+	params := url.Values{}
+	params.Set("cType", fileType)
+	params.Set("file", filePath)
+	params.Set("v", coreVersion)
+
+	if extensionName != "" {
+		params.Set("cName", extensionName)
+	}
+	if extensionVersion != "" {
+		params.Set("cVersion", extensionVersion)
+	}
+
+	resp, err := c.request(ctx, "get_wp_file_content", params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for error in response (JSON error message)
+	var errResp struct {
+		ErrorMsg string `json:"errorMsg"`
+	}
+	if err := json.Unmarshal(resp, &errResp); err == nil && errResp.ErrorMsg != "" {
+		return nil, &NOC1Error{
+			Action:  "get_wp_file_content",
+			Message: errResp.ErrorMsg,
+		}
+	}
+
+	return resp, nil
+}
+
+// ParsePatternsResponse converts a GetPatternsResponse into a SignatureSet
+func ParsePatternsResponse(resp *GetPatternsResponse) (*intel.SignatureSet, error) {
+	// Convert raw rules to intel.RawSignatureRule
+	rules := make([]*intel.RawSignatureRule, 0, len(resp.Rules))
+
+	for _, rawRule := range resp.Rules {
+		rule, err := ParseSignatureRule(rawRule)
+		if err != nil {
+			// Skip malformed rules but log them
+			continue
+		}
+
+		rules = append(rules, &intel.RawSignatureRule{
+			ID:             rule.ID,
+			Type:           rule.Type,
+			Rule:           rule.Rule,
+			Category:       rule.Category,
+			Description:    rule.Description,
+			Enabled:        rule.Enabled,
+			Name:           rule.Name,
+			LogDescription: rule.LogDescription,
+			CommonStrings:  rule.CommonStrings,
+		})
+	}
+
+	sigSet, err := intel.ParseSignatureSet(resp.CommonStrings, rules, resp.SignatureUpdateTime)
+	if err != nil {
+		return nil, fmt.Errorf("parsing signature set: %w", err)
+	}
+	return sigSet, nil
 }

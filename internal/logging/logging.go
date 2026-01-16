@@ -142,9 +142,9 @@ func (l *Logger) log(level Level, format string, args ...interface{}) {
 		} else {
 			prefix = fmt.Sprintf("[%s] ", level.String())
 		}
-		fmt.Fprintf(out, "%s%s\n", prefix, msg)
+		_, _ = fmt.Fprintf(out, "%s%s\n", prefix, msg)
 	} else {
-		fmt.Fprintln(out, msg)
+		_, _ = fmt.Fprintln(out, msg)
 	}
 }
 
@@ -209,6 +209,11 @@ func Verbose(format string, args ...interface{}) {
 // Info logs an informational message to the default logger.
 func Info(format string, args ...interface{}) {
 	defaultLogger.Info(format, args...)
+}
+
+// Success logs a success message (green) to the default logger.
+func Success(format string, args ...interface{}) {
+	defaultLogger.Info("✓ "+format, args...)
 }
 
 // Warning logs a warning message to the default logger.

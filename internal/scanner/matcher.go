@@ -10,8 +10,8 @@ import (
 
 	"github.com/dlclark/regexp2"
 
-	"github.com/nickcampbell/wordfence-go/internal/intel"
-	"github.com/nickcampbell/wordfence-go/internal/logging"
+	"github.com/greysquirr3l/wordfence-go/internal/intel"
+	"github.com/greysquirr3l/wordfence-go/internal/logging"
 )
 
 // DefaultMatchTimeout is the default timeout for pattern matching
@@ -213,7 +213,7 @@ func (mc *MatchContext) MatchChunk(ctx context.Context, content []byte, isStart 
 	for _, sig := range mc.matcher.noCommonStrSigs {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
 		default:
 		}
 
@@ -226,7 +226,7 @@ func (mc *MatchContext) MatchChunk(ctx context.Context, content []byte, isStart 
 	for _, sig := range possibleSigs {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
 		default:
 		}
 

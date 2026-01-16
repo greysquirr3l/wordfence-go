@@ -4,6 +4,7 @@ package cache
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -36,15 +37,15 @@ type Cache interface {
 	Exists(key string, maxAge time.Duration) bool
 }
 
-// CacheEntry represents a cached item with metadata
-type CacheEntry struct {
+// Entry represents a cached item with metadata
+type Entry struct {
 	Key       string
 	Data      []byte
 	CreatedAt time.Time
 }
 
 // IsExpired checks if the entry is expired based on maxAge
-func (e *CacheEntry) IsExpired(maxAge time.Duration) bool {
+func (e *Entry) IsExpired(maxAge time.Duration) bool {
 	if maxAge <= 0 {
 		return false // No expiration
 	}
@@ -60,7 +61,7 @@ func EncodeKey(key string) string {
 func DecodeKey(encoded string) (string, error) {
 	data, err := hex.DecodeString(encoded)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("decoding cache key: %w", err)
 	}
 	return string(data), nil
 }
@@ -68,18 +69,23 @@ func DecodeKey(encoded string) (string, error) {
 // NoOpCache is a cache that does nothing (for when caching is disabled)
 type NoOpCache struct{}
 
+// NewNoOpCache creates a new no-op cache
+func NewNoOpCache() *NoOpCache {
+	return &NoOpCache{}
+}
+
 // Get always returns ErrCacheDisabled
-func (c *NoOpCache) Get(key string, maxAge time.Duration) ([]byte, error) {
+func (c *NoOpCache) Get(_ string, _ time.Duration) ([]byte, error) {
 	return nil, ErrCacheDisabled
 }
 
 // Put does nothing
-func (c *NoOpCache) Put(key string, value []byte) error {
+func (c *NoOpCache) Put(_ string, _ []byte) error {
 	return nil
 }
 
 // Remove does nothing
-func (c *NoOpCache) Remove(key string) error {
+func (c *NoOpCache) Remove(_ string) error {
 	return nil
 }
 
@@ -89,19 +95,19 @@ func (c *NoOpCache) Purge() error {
 }
 
 // Exists always returns false
-func (c *NoOpCache) Exists(key string, maxAge time.Duration) bool {
+func (c *NoOpCache) Exists(_ string, _ time.Duration) bool {
 	return false
 }
 
 // MemoryCache is an in-memory cache implementation
 type MemoryCache struct {
-	items map[string]*CacheEntry
+	items map[string]*Entry
 }
 
 // NewMemoryCache creates a new in-memory cache
 func NewMemoryCache() *MemoryCache {
 	return &MemoryCache{
-		items: make(map[string]*CacheEntry),
+		items: make(map[string]*Entry),
 	}
 }
 
@@ -122,7 +128,7 @@ func (c *MemoryCache) Get(key string, maxAge time.Duration) ([]byte, error) {
 
 // Put stores a value in the memory cache
 func (c *MemoryCache) Put(key string, value []byte) error {
-	c.items[key] = &CacheEntry{
+	c.items[key] = &Entry{
 		Key:       key,
 		Data:      value,
 		CreatedAt: time.Now(),
@@ -138,7 +144,7 @@ func (c *MemoryCache) Remove(key string) error {
 
 // Purge clears all values from the memory cache
 func (c *MemoryCache) Purge() error {
-	c.items = make(map[string]*CacheEntry)
+	c.items = make(map[string]*Entry)
 	return nil
 }
 

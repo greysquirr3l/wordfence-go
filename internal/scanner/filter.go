@@ -2,6 +2,7 @@
 package scanner
 
 import (
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -99,7 +100,7 @@ func FilterImages(path string) bool {
 }
 
 // FilterAny always returns true
-func FilterAny(path string) bool {
+func FilterAny(_ string) bool {
 	return true
 }
 
@@ -114,7 +115,7 @@ func FilterFilename(filename string) func(string) bool {
 func FilterPattern(pattern string) (func(string) bool, error) {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("compiling filter pattern: %w", err)
 	}
 	return func(path string) bool {
 		return re.MatchString(path)
@@ -165,7 +166,7 @@ func AllFilesFilter() *FileFilter {
 	return f
 }
 
-// CustomFilter creates a filter with custom include/exclude patterns
+// FilterConfig allows creating a filter with custom include/exclude patterns
 type FilterConfig struct {
 	IncludeFiles    []string // Specific filenames to include
 	IncludePatterns []string // Regex patterns to include

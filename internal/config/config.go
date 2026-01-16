@@ -2,6 +2,8 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,17 +101,18 @@ func Load(configFile string) (*Config, error) {
 
 	// Read config file (ignore if not found)
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
 			// Only return error if it's not a "file not found" error
 			if configFile != "" {
-				return nil, err
+				return nil, fmt.Errorf("reading config: %w", err)
 			}
 		}
 	}
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
 	cfg.ConfigFile = v.ConfigFileUsed()

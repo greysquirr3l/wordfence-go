@@ -2,7 +2,7 @@
 package main
 
 import (
-	"github.com/nickcampbell/wordfence-go/cmd/wordfence/cmd"
+	"github.com/greysquirr3l/wordfence-go/cmd/wordfence/cmd"
 )
 
 func main() {

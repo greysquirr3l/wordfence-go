@@ -1,10 +1,11 @@
 // Package api provides HTTP client functionality for Wordfence APIs
-package api
+package api //nolint:revive // api is a well-understood package name for API clients
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nickcampbell/wordfence-go/internal/logging"
-	"github.com/nickcampbell/wordfence-go/internal/version"
+	"github.com/greysquirr3l/wordfence-go/internal/logging"
 )
 
 // DefaultTimeout is the default HTTP request timeout
@@ -73,7 +73,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		HTTPClient: &http.Client{
 			Timeout: DefaultTimeout,
 		},
-		UserAgent: fmt.Sprintf("wordfence-go/%s", version.GetVersion()),
+		UserAgent: "python-requests/2.31.0",
 		Retries:   DefaultRetries,
 		RetryWait: DefaultRetryWait,
 		Logger:    logging.New(logging.LevelInfo),
@@ -95,7 +95,7 @@ func (c *Client) Request(ctx context.Context, method, path string, body io.Reade
 			c.Logger.Debug("Retrying request (attempt %d/%d) after error: %v", attempt, c.Retries, lastErr)
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 			case <-time.After(c.RetryWait * time.Duration(attempt)):
 				// Exponential backoff
 			}
@@ -136,7 +136,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -202,7 +202,8 @@ func (e *HTTPError) Error() string {
 
 // IsHTTPError checks if an error is an HTTPError and returns it
 func IsHTTPError(err error) (*HTTPError, bool) {
-	if httpErr, ok := err.(*HTTPError); ok {
+	var httpErr *HTTPError
+	if errors.As(err, &httpErr) {
 		return httpErr, true
 	}
 	return nil, false
