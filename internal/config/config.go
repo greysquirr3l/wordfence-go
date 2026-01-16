@@ -69,7 +69,9 @@ func DefaultConfigPath() string {
 func Load(configFile string) (*Config, error) {
 	// Create codec registry and register INI support
 	codecRegistry := viper.NewCodecRegistry()
-	codecRegistry.RegisterCodec("ini", ini.Codec{})
+	if err := codecRegistry.RegisterCodec("ini", ini.Codec{}); err != nil {
+		return nil, fmt.Errorf("registering INI codec: %w", err)
+	}
 
 	v := viper.NewWithOptions(
 		viper.WithCodecRegistry(codecRegistry),
@@ -180,11 +182,16 @@ func ExpandPath(path string) string {
 // parseINILicense manually parses an INI file to extract the license value.
 // This is a fallback when Viper fails to parse the INI properly.
 func parseINILicense(configFile string) (string, error) {
-	file, err := os.Open(configFile)
+	file, err := os.Open(configFile) //nolint:gosec // configFile is from trusted Viper config path
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("opening config file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			// Log error but don't fail parsing
+			fmt.Fprintf(os.Stderr, "Warning: failed to close config file: %v\n", closeErr)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -220,5 +227,8 @@ func parseINILicense(configFile string) (string, error) {
 		}
 	}
 
-	return "", scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("scanning config file: %w", err)
+	}
+	return "", nil
 }
