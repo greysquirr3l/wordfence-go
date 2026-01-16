@@ -26,6 +26,11 @@ func (s *NOC1RemediationSource) GetCorrectContent(ctx context.Context, identity 
 		return nil, fmt.Errorf("unknown file identity")
 	}
 
+	// Validate required fields for core files
+	if identity.Type == FileTypeCore && identity.CoreVersion == "" {
+		return nil, fmt.Errorf("WordPress version not detected - ensure wp-includes/version.php exists and is readable")
+	}
+
 	var extensionName, extensionVersion string
 
 	switch identity.Type {
@@ -34,9 +39,15 @@ func (s *NOC1RemediationSource) GetCorrectContent(ctx context.Context, identity 
 	case FileTypePlugin:
 		extensionName = identity.GetExtensionName()
 		extensionVersion = identity.GetExtensionVersion()
+		if extensionName == "" || extensionVersion == "" {
+			return nil, fmt.Errorf("plugin name or version not detected")
+		}
 	case FileTypeTheme:
 		extensionName = identity.GetExtensionName()
 		extensionVersion = identity.GetExtensionVersion()
+		if extensionName == "" || extensionVersion == "" {
+			return nil, fmt.Errorf("theme name or version not detected")
+		}
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s", identity.Type)
 	}

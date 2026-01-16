@@ -91,7 +91,10 @@ func (r *Remediator) RemediateFile(ctx context.Context, path string) *Remediatio
 	}
 	result.Known = true
 
-	r.logger.Debug("Identified %s as %s file", path, identity.Type)
+	r.logger.Debug("Identified %s as %s file (version: %s, localPath: %s)", path, identity.Type, identity.CoreVersion, identity.LocalPath)
+	if identity.Site != nil {
+		r.logger.Debug("WordPress site detected at: %s (version: %s)", identity.Site.Path, identity.Site.Version)
+	}
 
 	// Get the correct content
 	correctContent, err := r.source.GetCorrectContent(ctx, identity)

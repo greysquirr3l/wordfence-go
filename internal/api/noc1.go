@@ -72,12 +72,25 @@ func (c *NOC1Client) buildQuery(action string, extraParams url.Values) url.Value
 	return query
 }
 
-// request makes a request to the NOC1 API
+// request makes a GET request to the NOC1 API
 func (c *NOC1Client) request(ctx context.Context, action string, extraParams url.Values) ([]byte, error) {
 	query := c.buildQuery(action, extraParams)
 	path := "/?" + query.Encode()
 
 	resp, err := c.Get(ctx, path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("NOC1 API request failed: %w", err)
+	}
+
+	return resp, nil
+}
+
+// requestPost makes a POST request to the NOC1 API with form data in body
+func (c *NOC1Client) requestPost(ctx context.Context, action string, bodyParams url.Values) ([]byte, error) {
+	query := c.buildQuery(action, nil)
+	path := "/?" + query.Encode()
+
+	resp, err := c.Post(ctx, path, bodyParams, nil)
 	if err != nil {
 		return nil, fmt.Errorf("NOC1 API request failed: %w", err)
 	}
@@ -329,20 +342,21 @@ func (c *NOC1Client) GetPatternsAsSignatureSet(ctx context.Context) (*intel.Sign
 
 
 // GetWPFileContent retrieves the correct content for a WordPress file
+// This endpoint requires POST with form data in the body
 func (c *NOC1Client) GetWPFileContent(ctx context.Context, fileType, filePath, coreVersion string, extensionName, extensionVersion string) ([]byte, error) {
-	params := url.Values{}
-	params.Set("cType", fileType)
-	params.Set("file", filePath)
-	params.Set("v", coreVersion)
+	bodyParams := url.Values{}
+	bodyParams.Set("cType", fileType)
+	bodyParams.Set("file", filePath)
+	bodyParams.Set("v", coreVersion)
 
 	if extensionName != "" {
-		params.Set("cName", extensionName)
+		bodyParams.Set("cName", extensionName)
 	}
 	if extensionVersion != "" {
-		params.Set("cVersion", extensionVersion)
+		bodyParams.Set("cVersion", extensionVersion)
 	}
 
-	resp, err := c.request(ctx, "get_wp_file_content", params)
+	resp, err := c.requestPost(ctx, "get_wp_file_content", bodyParams)
 	if err != nil {
 		return nil, err
 	}

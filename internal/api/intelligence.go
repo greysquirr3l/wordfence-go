@@ -50,8 +50,8 @@ func NewIntelligenceClient(opts ...IntelligenceOption) *IntelligenceClient {
 	return c
 }
 
-// buildPath builds the API path with license key
-func (c *IntelligenceClient) buildPath(endpoint string) string {
+// buildLicensedPath builds the API path with license key for endpoints that require it
+func (c *IntelligenceClient) buildLicensedPath(endpoint string) string {
 	if c.License != nil {
 		return fmt.Sprintf("/%s/%s", c.License.Key, endpoint)
 	}
@@ -59,8 +59,9 @@ func (c *IntelligenceClient) buildPath(endpoint string) string {
 }
 
 // GetScannerVulnerabilities fetches the scanner vulnerability feed
+// This is a public endpoint that doesn't require license in the URL
 func (c *IntelligenceClient) GetScannerVulnerabilities(ctx context.Context) (*intel.VulnerabilityIndex, error) {
-	path := c.buildPath("scanner")
+	path := "/vulnerabilities/scanner"
 
 	resp, err := c.Get(ctx, path, nil)
 	if err != nil {
@@ -76,8 +77,9 @@ func (c *IntelligenceClient) GetScannerVulnerabilities(ctx context.Context) (*in
 }
 
 // GetProductionVulnerabilities fetches the production vulnerability feed (more detailed)
+// This is a public endpoint that doesn't require license in the URL
 func (c *IntelligenceClient) GetProductionVulnerabilities(ctx context.Context) (*intel.VulnerabilityIndex, error) {
-	path := c.buildPath("production")
+	path := "/vulnerabilities/production"
 
 	resp, err := c.Get(ctx, path, nil)
 	if err != nil {
@@ -98,7 +100,7 @@ func (c *IntelligenceClient) GetSoftwareVulnerabilities(ctx context.Context, sof
 	params.Set("type", string(softwareType))
 	params.Set("slug", slug)
 
-	path := c.buildPath("software") + "?" + params.Encode()
+	path := "/vulnerabilities/software?" + params.Encode()
 
 	resp, err := c.Get(ctx, path, nil)
 	if err != nil {

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-01-16
+
+### Fixed
+- Fixed vulnerability API endpoint (was incorrectly using `/{license}/scanner`, now uses `/vulnerabilities/scanner`)
+- Fixed remediation API call - `get_wp_file_content` now uses POST with form data in body (matching Python CLI behavior)
+- Added proper validation for required fields in remediation (WordPress version, plugin/theme name and version)
+
+### Added
+- Added `GetDefaultLogger()` function to logging package for sharing logger instances
+- Added debug logging for remediation showing detected WordPress site, version, and local path
+- Comprehensive README documentation including:
+  - Detailed usage examples for malware-scan, vuln-scan, and remediate commands
+  - Complete flag reference tables
+  - Output format examples (human, CSV, JSON)
+  - Remediation limitations table
+  - Advanced examples (find piping, cron jobs, automated remediation)
+  - Feature comparison with Python CLI
+
+### Changed
+- Improved error messages for remediation failures (now indicates specific missing fields)
+
 ## [0.1.4] - 2026-01-15
 
 ### Changed

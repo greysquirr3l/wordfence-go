@@ -181,6 +181,11 @@ func (l *Logger) Critical(format string, args ...interface{}) {
 // Default logger instance.
 var defaultLogger = New(LevelInfo)
 
+// GetDefaultLogger returns the default logger instance.
+func GetDefaultLogger() *Logger {
+	return defaultLogger
+}
+
 // SetDefaultLevel sets the default logger level.
 func SetDefaultLevel(level Level) {
 	defaultLogger.SetLevel(level)
