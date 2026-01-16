@@ -14,6 +14,7 @@ import (
 
 	"github.com/greysquirr3l/wordfence-go/internal/api"
 	"github.com/greysquirr3l/wordfence-go/internal/cache"
+	"github.com/greysquirr3l/wordfence-go/internal/config"
 	"github.com/greysquirr3l/wordfence-go/internal/intel"
 	"github.com/greysquirr3l/wordfence-go/internal/logging"
 	"github.com/greysquirr3l/wordfence-go/internal/scanner"
@@ -71,7 +72,13 @@ func runVulnScan(paths []string) error {
 
 	// Check for license
 	if cfg.License == "" {
-		logging.Error("No license key configured. Set WORDFENCE_CLI_LICENSE or use --license flag.")
+		logging.Error("No license key configured.")
+		logging.Info("You can configure your license in one of the following ways:")
+		logging.Info("  1. Config file: %s", config.DefaultConfigPath())
+		logging.Info("     Add: license = YOUR_LICENSE_KEY")
+		logging.Info("  2. Environment: export WORDFENCE_CLI_LICENSE=YOUR_LICENSE_KEY")
+		logging.Info("  3. CLI flag: --license YOUR_LICENSE_KEY")
+		logging.Info("")
 		logging.Info("Visit https://www.wordfence.com/products/wordfence-cli/ to obtain a license.")
 		os.Exit(1)
 	}

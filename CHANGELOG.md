@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-01-16
+
+### Fixed
+- Fixed INI configuration file parsing by adding proper INI codec support
+- Configuration files with `[DEFAULT]` sections now work correctly
+
+### Added
+- Added `github.com/go-viper/encoding/ini` dependency for proper INI file support
+- Enhanced debug logging for configuration troubleshooting (with license values redacted for security)
+
+### Changed  
+- Improved license error messages to clearly show all three configuration options (config file, environment variable, CLI flag)
+- Updated error messages to display actual config file path for better user guidance
+
 ## [0.1.6] - 2026-01-16
 
 ### Fixed

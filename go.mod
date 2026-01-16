@@ -5,6 +5,7 @@ go 1.24
 require (
 	github.com/dlclark/regexp2 v1.11.5
 	github.com/fatih/color v1.18.0
+	github.com/go-viper/encoding/ini v0.1.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 )
@@ -25,4 +26,5 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
+	gopkg.in/ini.v1 v1.67.0 // indirect
 )

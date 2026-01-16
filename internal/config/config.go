@@ -2,12 +2,14 @@
 package config
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/go-viper/encoding/ini"
 	"github.com/spf13/viper"
 )
 
@@ -65,7 +67,13 @@ func DefaultConfigPath() string {
 // 3. Config file
 // 4. Defaults
 func Load(configFile string) (*Config, error) {
-	v := viper.New()
+	// Create codec registry and register INI support
+	codecRegistry := viper.NewCodecRegistry()
+	codecRegistry.RegisterCodec("ini", ini.Codec{})
+
+	v := viper.NewWithOptions(
+		viper.WithCodecRegistry(codecRegistry),
+	)
 
 	// Set defaults
 	defaults := DefaultConfig()
@@ -110,6 +118,46 @@ func Load(configFile string) (*Config, error) {
 		}
 	}
 
+	// Debug: print config file info (without sensitive values)
+	if os.Getenv("WORDFENCE_DEBUG_CONFIG") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Config file used: %s\n", v.ConfigFileUsed())
+		fmt.Fprintf(os.Stderr, "[DEBUG] All keys: %v\n", v.AllKeys())
+		// Don't print license values for security
+		settings := v.AllSettings()
+		if _, exists := settings["license"]; exists {
+			settings["license"] = "[REDACTED]"
+		}
+		if _, exists := settings["DEFAULT.license"]; exists {
+			settings["DEFAULT.license"] = "[REDACTED]"
+		}
+		fmt.Fprintf(os.Stderr, "[DEBUG] All settings: %v\n", settings)
+
+		hasLicense := v.GetString("license") != ""
+		fmt.Fprintf(os.Stderr, "[DEBUG] license configured: %v\n", hasLicense)
+	}
+
+	// Handle INI section prefixes - Viper reads [DEFAULT] section as "DEFAULT.key"
+	// Check for DEFAULT.license if license is not set directly
+	if v.GetString("license") == "" && v.GetString("DEFAULT.license") != "" {
+		v.Set("license", v.GetString("DEFAULT.license"))
+		if os.Getenv("WORDFENCE_DEBUG_CONFIG") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Set license from DEFAULT section\n")
+		}
+	}
+
+	// Fallback: manually parse INI file if Viper failed to read license
+	if v.GetString("license") == "" && v.ConfigFileUsed() != "" {
+		if manualLicense, err := parseINILicense(v.ConfigFileUsed()); err == nil && manualLicense != "" {
+			v.Set("license", manualLicense)
+			if os.Getenv("WORDFENCE_DEBUG_CONFIG") != "" {
+				fmt.Fprintf(os.Stderr, "[DEBUG] Set license from manual INI parsing\n")
+			}
+		}
+	}
+	if v.GetString("cache_directory") == "" && v.GetString("DEFAULT.cache_directory") != "" {
+		v.Set("cache_directory", v.GetString("DEFAULT.cache_directory"))
+	}
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
@@ -127,4 +175,50 @@ func ExpandPath(path string) string {
 		return filepath.Join(homeDir, path[2:])
 	}
 	return path
+}
+
+// parseINILicense manually parses an INI file to extract the license value.
+// This is a fallback when Viper fails to parse the INI properly.
+func parseINILicense(configFile string) (string, error) {
+	file, err := os.Open(configFile)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+
+		// Skip section headers
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			continue
+		}
+
+		// Look for license = value
+		if strings.Contains(line, "=") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+
+				// Remove quotes if present
+				if (strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)) ||
+					(strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`)) {
+					value = value[1 : len(value)-1]
+				}
+
+				if key == "license" && value != "" {
+					return value, nil
+				}
+			}
+		}
+	}
+
+	return "", scanner.Err()
 }

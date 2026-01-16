@@ -32,8 +32,8 @@ PHP/other malware and WordPress vulnerabilities.
 It can scan filesystems for malware signatures and check WordPress
 installations for known vulnerabilities in core, plugins, and themes.`,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-		// Skip config loading for version and help commands
-		if cmd.Name() == "version" || cmd.Name() == "help" {
+		// Skip config loading for version, help, and configure commands
+		if cmd.Name() == "version" || cmd.Name() == "help" || cmd.Name() == "configure" {
 			return nil
 		}
 
