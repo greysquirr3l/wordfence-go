@@ -90,7 +90,7 @@ func (c *FileCache) Get(key string, maxAge time.Duration) ([]byte, error) {
 	}
 
 	// Read the file
-	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from cache key, not user input
+	data, err := os.ReadFile(path) // #nosec G304 -- path is constructed from cache key, not user input
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cache file: %w", err)
 	}

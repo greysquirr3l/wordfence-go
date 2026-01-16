@@ -112,7 +112,7 @@ func LoadFromFile() (*License, error) {
 
 // loadFromINIFile loads the license from an INI file
 func loadFromINIFile(path string) (*License, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // config file path from known locations
+	data, err := os.ReadFile(path) // #nosec G304 -- config file path from known locations
 	if err != nil {
 		return nil, fmt.Errorf("reading file: %w", err)
 	}
