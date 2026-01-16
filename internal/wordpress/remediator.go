@@ -20,13 +20,13 @@ type RemediationSource interface {
 
 // RemediationResult represents the result of remediating a file
 type RemediationResult struct {
-	Path        string
-	Identity    *FileIdentity
-	Known       bool
-	Remediated  bool
-	BackupPath  string
-	Error       error
-	TargetPath  string
+	Path       string
+	Identity   *FileIdentity
+	Known      bool
+	Remediated bool
+	BackupPath string
+	Error      error
+	TargetPath string
 }
 
 // Success returns true if remediation was successful
@@ -36,9 +36,9 @@ func (r *RemediationResult) Success() bool {
 
 // RemediatorConfig configures the Remediator
 type RemediatorConfig struct {
-	CreateBackup  bool
-	BackupDir     string
-	DryRun        bool
+	CreateBackup   bool
+	BackupDir      string
+	DryRun         bool
 	FollowSymlinks bool
 }
 
@@ -220,11 +220,11 @@ func (r *Remediator) RemediateDirectory(ctx context.Context, dir string) <-chan 
 
 // RemediationStats holds remediation statistics
 type RemediationStats struct {
-	Total        int
-	Remediated   int
-	Skipped      int
-	Failed       int
-	Unknown      int
+	Total      int
+	Remediated int
+	Skipped    int
+	Failed     int
+	Unknown    int
 }
 
 // CollectResults collects results and computes statistics

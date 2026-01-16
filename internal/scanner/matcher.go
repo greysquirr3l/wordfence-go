@@ -41,10 +41,10 @@ type CompiledPattern struct {
 
 // CompiledSignature represents a signature with a compiled pattern
 type CompiledSignature struct {
-	Signature      *intel.Signature
-	Pattern        *CompiledPattern
-	AnchoredStart  bool
-	CompileError   error
+	Signature     *intel.Signature
+	Pattern       *CompiledPattern
+	AnchoredStart bool
+	CompileError  error
 }
 
 // CompiledCommonString represents a common string with a compiled pattern

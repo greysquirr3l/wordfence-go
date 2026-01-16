@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-01-16
+
+### Fixed
+- Removed unused `buildLicensedPath` function from intelligence API client
+
+### Added
+- README documentation for resource control options (ChunkSize, ContentLimit, MatchTimeout, AllowIOErrors, FollowSymlinks)
+- README documentation for low-priority scanning with `nice` and `ionice`
+- Performance tips section in README
+
+### Changed
+- Code formatting fixes via `go fmt`
+
 ## [0.1.5] - 2026-01-16
 
 ### Fixed

@@ -173,6 +173,34 @@ wordfence malware-scan --output-format csv /var/www/wordpress | \
   wordfence remediate --read-stdin
 ```
 
+#### Low-priority scanning on production servers
+
+Use `nice` and `ionice` to minimize impact on server performance:
+
+```bash
+# Lower CPU priority (nice value 10)
+nice -n 10 wordfence malware-scan --license "$WORDFENCE_CLI_LICENSE" /var/www
+
+# Lowest CPU priority (nice value 19)
+nice -n 19 wordfence malware-scan --license "$WORDFENCE_CLI_LICENSE" /var/www
+
+# Combined CPU and I/O priority limiting (recommended for production)
+ionice -c 2 -n 7 nice -n 10 wordfence malware-scan --workers 2 --license "$WORDFENCE_CLI_LICENSE" /var/www
+```
+
+**Nice values:** `-20` (highest priority, needs root) to `19` (lowest/most polite). Default is `0`.
+
+**ionice classes:**
+- `-c 1` = Real-time (needs root)
+- `-c 2` = Best-effort (default), with `-n 0-7` priority (7 = lowest)
+- `-c 3` = Idle (only runs when no other I/O)
+
+**Production cron example with resource limits:**
+
+```bash
+0 2 * * * ionice -c 2 -n 7 nice -n 10 /usr/bin/flock -w 0 /tmp/wordfence.lock /usr/local/bin/wordfence malware-scan --workers 2 --output-format csv --output /var/log/wordfence/scan.csv /var/www 2>&1 >> /var/log/wordfence/scan.log
+```
+
 ## Configuration
 
 Configuration can be set via:
@@ -207,17 +235,36 @@ verbose = on
 
 ### Malware Scan Flags
 
-| Flag | Description |
-| ------ | ------------- |
-| `--output`, `-o` | Output file path |
-| `--output-format` | Output format: `human`, `csv`, `tsv`, `json` |
-| `--workers`, `-w` | Number of worker goroutines |
-| `--include-all-files` | Scan all files, not just PHP/HTML/JS |
-| `--read-stdin` | Read file paths from stdin |
-| `--include-files` | Additional filenames to include |
-| `--include-pattern` | Regex patterns for files to include |
-| `--exclude-files` | Filenames to exclude |
-| `--exclude-pattern` | Regex patterns to exclude |
+| Flag | Description | Default |
+| ------ | ------------- | ------- |
+| `--output`, `-o` | Output file path | stdout |
+| `--output-format` | Output format: `human`, `csv`, `tsv`, `json` | `human` |
+| `--workers`, `-w` | Number of worker goroutines | NumCPU |
+| `--include-all-files` | Scan all files, not just PHP/HTML/JS | false |
+| `--read-stdin` | Read file paths from stdin | false |
+| `--include-files` | Additional filenames to include | |
+| `--include-pattern` | Regex patterns for files to include | |
+| `--exclude-files` | Filenames to exclude | |
+| `--exclude-pattern` | Regex patterns to exclude | |
+
+### Resource Control (Internal Defaults)
+
+These options control resource usage during scanning. They are currently set internally but can be adjusted in the source code:
+
+| Option | Description | Default |
+| ------ | ------------- | ------- |
+| `ChunkSize` | Memory buffer size for reading files | 1 MB |
+| `ContentLimit` | Maximum file content to scan (0 = unlimited) | No limit |
+| `MatchTimeout` | Timeout for each regex pattern match | 1 second |
+| `AllowIOErrors` | Continue scanning on file read errors | false |
+| `FollowSymlinks` | Follow symbolic links during scan | false |
+
+**Performance Tips:**
+
+- **Workers**: Set `--workers` to match your CPU cores for optimal performance
+- **Large files**: Files are read into memory; very large files may need `ContentLimit`
+- **Slow patterns**: Complex regex patterns may timeout; check for `timeouts` in results
+- **Network filesystems**: Consider `AllowIOErrors` for unreliable mounts
 
 ### Vulnerability Scan Flags
 

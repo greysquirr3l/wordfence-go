@@ -60,12 +60,12 @@ func (vr *VersionRange) Includes(version string) bool {
 
 // Software represents affected software
 type Software struct {
-	Type             SoftwareType              `json:"type"`
-	Name             string                    `json:"name"`
-	Slug             string                    `json:"slug"`
+	Type             SoftwareType             `json:"type"`
+	Name             string                   `json:"name"`
+	Slug             string                   `json:"slug"`
 	AffectedVersions map[string]*VersionRange `json:"affected_versions"`
-	Patched          bool                      `json:"patched"`
-	PatchedVersions  []string                  `json:"patched_versions"`
+	Patched          bool                     `json:"patched"`
+	PatchedVersions  []string                 `json:"patched_versions"`
 }
 
 // CVSS represents CVSS score information
@@ -232,18 +232,18 @@ func ParseVulnerabilityIndex(data []byte) (*VulnerabilityIndex, error) {
 
 func parseVulnerability(id string, data json.RawMessage) (*Vulnerability, error) {
 	var v struct {
-		Title         string `json:"title"`
-		Description   string `json:"description"`
-		Informational bool   `json:"informational"`
-		Published     string `json:"published"`
-		Updated       string `json:"updated"`
-		CVE           string `json:"cve"`
+		Title         string   `json:"title"`
+		Description   string   `json:"description"`
+		Informational bool     `json:"informational"`
+		Published     string   `json:"published"`
+		Updated       string   `json:"updated"`
+		CVE           string   `json:"cve"`
 		References    []string `json:"references"`
 		Software      []struct {
-			Type             string `json:"type"`
-			Name             string `json:"name"`
-			Slug             string `json:"slug"`
-			Patched          bool   `json:"patched"`
+			Type             string   `json:"type"`
+			Name             string   `json:"name"`
+			Slug             string   `json:"slug"`
+			Patched          bool     `json:"patched"`
 			PatchedVersions  []string `json:"patched_versions"`
 			AffectedVersions map[string]struct {
 				FromVersion   string `json:"from_version"`
@@ -344,7 +344,7 @@ func CompareVersions(v1, v2 string) int {
 func normalizeVersion(version string) []int {
 	// Remove common suffixes
 	version = strings.TrimPrefix(version, "v")
-	
+
 	// Split by common delimiters
 	re := regexp.MustCompile(`[.\-_]`)
 	parts := re.Split(version, -1)

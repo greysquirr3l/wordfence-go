@@ -50,14 +50,6 @@ func NewIntelligenceClient(opts ...IntelligenceOption) *IntelligenceClient {
 	return c
 }
 
-// buildLicensedPath builds the API path with license key for endpoints that require it
-func (c *IntelligenceClient) buildLicensedPath(endpoint string) string {
-	if c.License != nil {
-		return fmt.Sprintf("/%s/%s", c.License.Key, endpoint)
-	}
-	return "/" + endpoint
-}
-
 // GetScannerVulnerabilities fetches the scanner vulnerability feed
 // This is a public endpoint that doesn't require license in the URL
 func (c *IntelligenceClient) GetScannerVulnerabilities(ctx context.Context) (*intel.VulnerabilityIndex, error) {

@@ -340,7 +340,6 @@ func (c *NOC1Client) GetPatternsAsSignatureSet(ctx context.Context) (*intel.Sign
 	return ParsePatternsResponse(resp)
 }
 
-
 // GetWPFileContent retrieves the correct content for a WordPress file
 // This endpoint requires POST with form data in the body
 func (c *NOC1Client) GetWPFileContent(ctx context.Context, fileType, filePath, coreVersion string, extensionName, extensionVersion string) ([]byte, error) {

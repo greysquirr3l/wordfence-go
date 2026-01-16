@@ -13,10 +13,10 @@ import (
 
 // VulnScanResult represents the result of a vulnerability scan
 type VulnScanResult struct {
-	Site           *wordpress.Site
+	Site            *wordpress.Site
 	Vulnerabilities []*VulnMatch
-	Error          error
-	ScanDuration   time.Duration
+	Error           error
+	ScanDuration    time.Duration
 }
 
 // VulnMatch represents a matched vulnerability
@@ -32,12 +32,12 @@ type VulnMatch struct {
 
 // VulnScanOptions configures the vulnerability scanner
 type VulnScanOptions struct {
-	CheckCore       bool
-	CheckPlugins    bool
-	CheckThemes     bool
-	Informational   bool
-	IncludeVulnIDs  []string
-	ExcludeVulnIDs  []string
+	CheckCore      bool
+	CheckPlugins   bool
+	CheckThemes    bool
+	Informational  bool
+	IncludeVulnIDs []string
+	ExcludeVulnIDs []string
 }
 
 // VulnScanner scans WordPress sites for vulnerabilities

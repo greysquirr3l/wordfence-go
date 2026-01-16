@@ -48,7 +48,7 @@ func (l *License) IsValid() bool {
 	if len(key) < 32 {
 		return false
 	}
-	
+
 	// Check if it's a valid hex string
 	for _, c := range key {
 		isDigit := c >= '0' && c <= '9'
@@ -58,7 +58,7 @@ func (l *License) IsValid() bool {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
