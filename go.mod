@@ -1,6 +1,6 @@
 module github.com/greysquirr3l/wordfence-go
 
-go 1.21
+go 1.24
 
 require (
 	github.com/dlclark/regexp2 v1.11.5
