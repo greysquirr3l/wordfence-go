@@ -1,0 +1,100 @@
+name: Check Upstream Release
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Weekly on Monday at 8am UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-upstream:
+    name: Check for upstream updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Get current tracked version
+        id: current
+        run: |
+          if [ -f .upstream-version ]; then
+            echo "version=$(cat .upstream-version)" >> $GITHUB_OUTPUT
+          else
+            echo "version=0.0.0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get latest upstream release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST=$(gh api repos/wordfence/wordfence-cli/releases/latest --jq '.tag_name' 2>/dev/null || echo "unknown")
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest upstream version: $LATEST"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          UPSTREAM="${{ steps.upstream.outputs.version }}"
+          
+          echo "Current tracked: $CURRENT"
+          echo "Upstream latest: $UPSTREAM"
+          
+          if [ "$CURRENT" != "$UPSTREAM" ] && [ "$UPSTREAM" != "unknown" ]; then
+            echo "new_release=true" >> $GITHUB_OUTPUT
+            echo "::notice::New upstream release detected: $UPSTREAM (currently tracking: $CURRENT)"
+          else
+            echo "new_release=false" >> $GITHUB_OUTPUT
+            echo "No new upstream release"
+          fi
+
+      - name: Check for existing issue
+        if: steps.compare.outputs.new_release == 'true'
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ISSUE=$(gh issue list --repo ${{ github.repository }} --label "upstream-update" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$ISSUE" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "issue_number=$ISSUE" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tracking issue
+        if: steps.compare.outputs.new_release == 'true' && steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "Upstream wordfence-cli ${{ steps.upstream.outputs.version }} released" \
+            --label "upstream-update" \
+            --body "A new version of [wordfence-cli](https://github.com/wordfence/wordfence-cli) has been released.
+
+          **New Version:** ${{ steps.upstream.outputs.version }}
+          **Previously Tracked:** ${{ steps.current.outputs.version }}
+          **Release Page:** https://github.com/wordfence/wordfence-cli/releases/tag/${{ steps.upstream.outputs.version }}
+
+          ## Action Items
+          - [ ] Review upstream changelog for new features
+          - [ ] Review upstream changelog for API changes
+          - [ ] Update implementation if needed
+          - [ ] Update \`.upstream-version\` file after review
+
+          ---
+          *This issue was automatically created by the upstream version check workflow.*"
+
+      - name: Update existing issue
+        if: steps.compare.outputs.new_release == 'true' && steps.existing.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ steps.existing.outputs.issue_number }} \
+            --repo ${{ github.repository }} \
+            --body "🔄 Version check ran again. Latest upstream version is still **${{ steps.upstream.outputs.version }}**."
