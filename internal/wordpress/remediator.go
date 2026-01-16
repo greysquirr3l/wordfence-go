@@ -141,7 +141,7 @@ func (r *Remediator) RemediateFile(ctx context.Context, path string) *Remediatio
 // createBackup creates a backup of the file
 func (r *Remediator) createBackup(path string) (string, error) {
 	// Read the original content
-	content, err := os.ReadFile(path) //nolint:gosec // path is from internal directory walk
+	content, err := os.ReadFile(path) // #nosec G304 -- path is from internal directory walk
 	if err != nil {
 		return "", fmt.Errorf("reading original file: %w", err)
 	}

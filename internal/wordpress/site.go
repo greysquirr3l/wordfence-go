@@ -130,7 +130,7 @@ func isCoreDirectory(path string) bool {
 func parseWordPressVersion(corePath string) (string, error) {
 	versionFile := filepath.Join(corePath, "wp-includes", "version.php")
 
-	file, err := os.Open(versionFile) //nolint:gosec // versionFile is constructed from corePath
+	file, err := os.Open(versionFile) // #nosec G304 -- versionFile is constructed from corePath
 	if err != nil {
 		return "", fmt.Errorf("failed to open version.php: %w", err)
 	}
@@ -265,7 +265,7 @@ func parseHeader(content string, fields map[string]string) map[string]string {
 
 // readFileHeader reads the first N bytes of a file for header parsing
 func readFileHeader(path string, maxBytes int) (string, error) {
-	file, err := os.Open(path) //nolint:gosec // path is derived from directory listing
+	file, err := os.Open(path) // #nosec G304 -- path is derived from directory listing
 	if err != nil {
 		return "", fmt.Errorf("opening file: %w", err)
 	}

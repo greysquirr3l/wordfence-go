@@ -209,7 +209,7 @@ func outputVulnResults(matches []*scanner.VulnMatch, sites []*wordpress.Site) er
 	var err error
 
 	if vulnScanOutput != "" && vulnScanOutput != "-" {
-		out, err = os.Create(vulnScanOutput) //nolint:gosec // user-specified output file
+		out, err = os.Create(vulnScanOutput) // #nosec G304 -- user-specified output file
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
