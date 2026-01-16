@@ -182,7 +182,8 @@ func ExpandPath(path string) string {
 // parseINILicense manually parses an INI file to extract the license value.
 // This is a fallback when Viper fails to parse the INI properly.
 func parseINILicense(configFile string) (string, error) {
-	file, err := os.Open(configFile) //nolint:gosec // configFile is from trusted Viper config path
+	// #nosec G304 -- configFile is from trusted Viper config path
+	file, err := os.Open(configFile)
 	if err != nil {
 		return "", fmt.Errorf("opening config file: %w", err)
 	}
