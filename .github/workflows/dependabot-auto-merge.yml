@@ -37,9 +37,10 @@ jobs:
       - name: Comment on major updates
         if: steps.metadata.outputs.update-type == 'version-update:semver-major'
         run: |
+          gh pr edit "$PR_URL" --add-assignee greysquirr3l
           gh pr comment "$PR_URL" --body "⚠️ **Major version update detected.**
 
-          This PR contains a major version bump which may include breaking changes.
+          @greysquirr3l - This PR contains a major version bump which may include breaking changes.
 
           Please review the changelog before merging:
           - Check for breaking API changes
