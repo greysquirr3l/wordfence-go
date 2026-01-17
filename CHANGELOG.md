@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-01-17
+
+### Added
+- **Pipeline Scanner Mode** (`--pipeline` flag): Advanced scanning architecture with:
+  - Staged pipeline: discover → filter → read → match → report
+  - Buffer pooling with tiered sizing (4KB/64KB/1MB) for memory efficiency
+  - Token bucket rate limiting for smooth I/O throttling
+  - Circuit breaker protection against cascading failures
+  - Idempotency support with content hashing and duplicate detection
+  - Graceful shutdown with proper drain on cancellation
+  - Detailed statistics per pipeline stage
+- **Performance Profiles**: New `--profile` flag with predefined resource settings:
+  - `gentle` - Minimal resource usage for shared/production servers
+  - `balanced` - Moderate speed with reasonable resource use
+  - `aggressive` - Maximum performance for dedicated servers
+  - `adaptive` - Dynamically adjusts based on system conditions
+- **Dynamic Resource Monitor**: Real-time monitoring using Go's `runtime/metrics` package:
+  - Heap allocation and GC pressure tracking
+  - Scheduler latency monitoring
+  - System load average awareness (Unix)
+  - Automatic throttling when resources are constrained
+- **Advanced Resource Control Flags**:
+  - `--memory-limit` - Pause scanning when memory exceeds threshold
+  - `--io-rate-limit` - Cap disk read speed in MB/s
+  - `--batch-size` / `--batch-pause` - Process files in batches with cooldown
+  - `--max-load` - Pause when system load is high (Unix only)
+- Basic resource control flags:
+  - `--scan-delay` - milliseconds delay between files
+  - `--chunk-size` - memory buffer size in KB
+  - `--max-file-size` - maximum file size to scan in MB
+  - `--match-timeout` - timeout for each regex match
+  - `--allow-io-errors` - continue on file read errors
+  - `--follow-symlinks` - follow symbolic links
+- Comprehensive documentation for all resource control options in README
+
+### Changed
+- Refactored `runMalwareScan` into smaller, more maintainable functions
+- Default `--match-timeout` now shown in help output (1 second)
+- Default `--chunk-size` now shown in help output (1024 KB)
+
+### Infrastructure
+- **Pipeline Scanner** (`pipeline.go`): Full pipeline architecture with parallel stages
+- **Token Bucket Rate Limiter** (`ratelimit.go`): Proper rate limiting with burst support for I/O operations
+- **Circuit Breaker** (`circuitbreaker.go`): Prevents cascading failures when API calls fail repeatedly
+- **Buffer Pool** (`bufferpool.go`): Memory-efficient buffer reuse using `sync.Pool` with tiered sizing
+- **Structured Domain Errors** (`errors.go`): Rich error types with codes, retry hints, and wrapped causes
+
 ## [0.1.7] - 2026-01-16
 
 ### Fixed

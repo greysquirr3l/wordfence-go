@@ -87,3 +87,8 @@ Temporary Items
 
 # GitHub CLI
 .github/.gh-resolved-dependencies
+
+# =========================
+#Development Documentation
+# =========================
+docs/dev/

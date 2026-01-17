@@ -93,6 +93,134 @@ wordfence malware-scan --include-all-files /var/www
 
 # Use multiple workers for faster scanning
 wordfence malware-scan --workers 8 /var/www
+
+# Low-resource scan (reduced workers, delay between files)
+wordfence malware-scan --workers 1 --scan-delay 50 /var/www
+
+# Use a performance profile (recommended for production)
+wordfence malware-scan --profile gentle /var/www
+```
+
+#### Performance Profiles
+
+For easy resource management, use predefined performance profiles:
+
+| Profile | Description | Best For |
+| --------- | ------------- | ---------- |
+| `gentle` | Minimal resource usage, very slow | Shared hosting, production servers under load |
+| `balanced` | Moderate speed and resources | General production use |
+| `aggressive` | Maximum speed, high resource usage | Dedicated servers, off-peak scanning |
+| `adaptive` | Dynamically adjusts based on system load | Servers with variable load |
+
+```bash
+# Production-safe scanning
+wordfence malware-scan --profile gentle /var/www
+
+# Default balanced scanning
+wordfence malware-scan --profile balanced /var/www
+
+# Fast scanning on dedicated servers
+wordfence malware-scan --profile aggressive /var/www
+
+# Adaptive scanning (auto-throttles under load)
+wordfence malware-scan --profile adaptive /var/www
+
+# Profile with overrides
+wordfence malware-scan --profile balanced --workers 4 /var/www
+```
+
+**Profile Settings:**
+
+| Setting | Gentle | Balanced | Aggressive |
+| --------- | -------- | ---------- | ------------ |
+| Workers | 1 | NumCPU/2 | NumCPU |
+| Scan Delay | 100ms | 25ms | 0 |
+| Memory Limit | 256MB | 512MB | Unlimited |
+| Max Load Avg | 2.0 | NumCPU×0.75 | Unlimited |
+| I/O Limit | 5 MB/s | 20 MB/s | Unlimited |
+| Batch Size | 50 files | 100 files | None |
+
+#### Resource Control Options
+
+The malware scanner provides several options to control resource utilization, particularly useful for production servers:
+
+| Flag | Description | Default |
+| ------ | ------------- | --------- |
+| `--workers N` | Number of concurrent scanning workers | NumCPU |
+| `--scan-delay MS` | Delay in milliseconds between files (reduces CPU/IO pressure) | 0 |
+| `--chunk-size KB` | Memory buffer size for reading files | 1024 KB |
+| `--max-file-size MB` | Maximum file size to scan (0 = unlimited) | 0 |
+| `--match-timeout SEC` | Timeout for each regex match | 1 sec |
+| `--allow-io-errors` | Continue on file read errors | false |
+| `--follow-symlinks` | Follow symbolic links | false |
+
+**Advanced Resource Control:**
+
+| Flag | Description | Default |
+| ------ | ------------- | --------- |
+| `--memory-limit MB` | Pause scanning when memory exceeds limit | Unlimited |
+| `--io-rate-limit MB/s` | Maximum disk read speed | Unlimited |
+| `--batch-size N` | Scan N files then pause (use with `--batch-pause`) | Disabled |
+| `--batch-pause MS` | Pause duration after each batch | Disabled |
+| `--max-load FLOAT` | Pause when system load exceeds value (Unix only) | Unlimited |
+
+**Examples for resource-constrained environments:**
+
+```bash
+# Gentle scan: single worker with 50ms delay between files
+wordfence malware-scan --workers 1 --scan-delay 50 /var/www
+
+# Memory-efficient: smaller chunk size
+wordfence malware-scan --chunk-size 256 /var/www
+
+# Skip large files (over 10MB)
+wordfence malware-scan --max-file-size 10 /var/www
+
+# Combined: production-safe settings
+wordfence malware-scan --workers 2 --scan-delay 25 --max-file-size 50 /var/www
+
+# Advanced: memory and I/O limiting
+wordfence malware-scan --memory-limit 256 --io-rate-limit 10 /var/www
+
+# Advanced: batch processing with pauses
+wordfence malware-scan --batch-size 100 --batch-pause 1000 /var/www
+
+# Advanced: load-aware scanning (Unix)
+wordfence malware-scan --max-load 4.0 /var/www
+```
+
+#### Pipeline Mode (Advanced)
+
+The `--pipeline` flag enables an advanced scanning architecture with additional features:
+
+| Feature | Description |
+| ------- | ----------- |
+| **Staged Pipeline** | Files flow through: discover → filter → read → match → report |
+| **Buffer Pooling** | Reuses memory buffers (tiered: 4KB/64KB/1MB) to reduce allocations |
+| **Token Bucket Rate Limiting** | Smooth I/O throttling with burst support |
+| **Circuit Breaker** | Prevents cascading failures from I/O errors |
+| **Idempotency** | Content hashing detects duplicate files |
+| **Graceful Shutdown** | Proper cleanup on cancellation |
+
+```bash
+# Use pipeline scanner with I/O rate limiting
+wordfence malware-scan --pipeline --io-rate-limit 10 /var/www
+
+# Pipeline with all advanced features
+wordfence malware-scan --pipeline --workers 4 --max-file-size 50 /var/www
+```
+
+**Pipeline output includes additional statistics:**
+```
+Pipeline scan complete:
+  Stage: Discovered: 1542 → Filtered: 876 → Read: 876 → Matched: 876 → Reported: 876
+  Files with matches: 3
+  Files skipped: 666
+  Duplicates skipped: 12
+  Total matches: 5
+  Bytes scanned: 42 MB
+  Duration: 12.345s
+  Buffer pool hit rate: 87.3%
 ```
 
 ### Vulnerability Scanning
