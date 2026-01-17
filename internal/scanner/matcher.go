@@ -283,6 +283,7 @@ func (mc *MatchContext) MatchChunk(ctx context.Context, content []byte, isStart 
 
 	// Zero-copy conversion: content must remain immutable during matching
 	// This eliminates memory allocation for the entire file content
+	// nolint:gosec // G103: Intentional unsafe for zero-copy performance (content is immutable during match)
 	contentStr := unsafe.String(unsafe.SliceData(content), len(content))
 
 	// Use Aho-Corasick for O(n) common string pre-filtering
@@ -326,6 +327,7 @@ func (mc *MatchContext) checkCommonStringsAC(content []byte) []*CompiledSignatur
 	// Use Aho-Corasick if available (single O(n) pass for ALL patterns)
 	if mc.matcher.acAutomaton != nil {
 		// Zero-copy string conversion for AC matching
+		// nolint:gosec // G103: Intentional unsafe for zero-copy performance (content is immutable during match)
 		contentStr := unsafe.String(unsafe.SliceData(content), len(content))
 
 		// Find all matches in a single pass
@@ -349,6 +351,7 @@ func (mc *MatchContext) checkCommonStringsAC(content []byte) []*CompiledSignatur
 		}
 	} else {
 		// Fallback to regex-based matching (slower)
+		// nolint:gosec // G103: Intentional unsafe for zero-copy performance (content is immutable during match)
 		contentStr := unsafe.String(unsafe.SliceData(content), len(content))
 		return mc.checkCommonStringsRegex(contentStr)
 	}

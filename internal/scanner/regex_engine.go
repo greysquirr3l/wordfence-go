@@ -2,7 +2,7 @@
 package scanner
 
 import (
-	"sync"
+	"fmt"
 	"time"
 
 	"github.com/dlclark/regexp2"
@@ -33,13 +33,6 @@ type CompiledRegex struct {
 	timeout time.Duration
 }
 
-// regexPool pools CompiledRegex wrappers to reduce allocations
-var regexPool = sync.Pool{
-	New: func() interface{} {
-		return &CompiledRegex{}
-	},
-}
-
 // CompileRegex compiles a pattern using the multi-layer strategy
 // It tries RE2 first, and falls back to regexp2 for PCRE-only features
 func CompileRegex(pattern string, timeout time.Duration) (*CompiledRegex, error) {
@@ -60,7 +53,7 @@ func CompileRegex(pattern string, timeout time.Duration) (*CompiledRegex, error)
 	pcrePat, err := regexp2.Compile(pattern, regexp2.RegexOptions(opts))
 	if err != nil {
 		// Pattern is invalid in both engines
-		return nil, err
+		return nil, fmt.Errorf("failed to compile regex pattern: %w", err)
 	}
 	pcrePat.MatchTimeout = timeout
 	cr.pcrePattern = pcrePat
@@ -68,12 +61,13 @@ func CompileRegex(pattern string, timeout time.Duration) (*CompiledRegex, error)
 	return cr, nil
 }
 
-// FindStringMatch finds the first match in the input string
+// FindStringMatch finds the first match in the input string.
+// Returns nil match (not error) when no match is found.
 func (cr *CompiledRegex) FindStringMatch(s string) (*RegexMatch, error) {
 	if cr.useRE2 && cr.re2Pattern != nil {
 		loc := cr.re2Pattern.FindStringIndex(s)
 		if loc == nil {
-			return nil, nil
+			return nil, nil // nolint:nilnil // nil match is valid "no match found" result
 		}
 		return &RegexMatch{
 			Value: s[loc[0]:loc[1]],
@@ -84,10 +78,10 @@ func (cr *CompiledRegex) FindStringMatch(s string) (*RegexMatch, error) {
 	// Use PCRE fallback
 	match, err := cr.pcrePattern.FindStringMatch(s)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("pcre match error: %w", err)
 	}
 	if match == nil {
-		return nil, nil
+		return nil, nil // nolint:nilnil // nil match is valid "no match found" result
 	}
 	return &RegexMatch{
 		Value: match.String(),
@@ -102,7 +96,11 @@ func (cr *CompiledRegex) MatchString(s string) (bool, error) {
 	}
 
 	// Use PCRE fallback
-	return cr.pcrePattern.MatchString(s)
+	matched, err := cr.pcrePattern.MatchString(s)
+	if err != nil {
+		return false, fmt.Errorf("pcre match error: %w", err)
+	}
+	return matched, nil
 }
 
 // RegexMatch represents a regex match result
