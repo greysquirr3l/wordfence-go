@@ -1,8 +1,8 @@
 # Wordfence CLI (Go)
 
 Wordfence CLI is a high-performance, multi-threaded security scanner that quickly scans filesystems to detect PHP/other
-malware and WordPress vulnerabilities. This is a Go port of the [official Python Wordfence CLI](https://github.com/wordfence/wordfence-cli) designed for static binary
-deployment on legacy Linux systems.
+malware and WordPress vulnerabilities. This is a Go port of the [official Python Wordfence CLI](https://github.com/wordfence/wordfence-cli)
+designed for static binary deployment on legacy Linux systems.
 
 ## Features
 
@@ -54,7 +54,8 @@ make build-embedded-linux-amd64
 
 ### Obtaining a license
 
-Visit [https://www.wordfence.com/products/wordfence-cli/](https://www.wordfence.com/products/wordfence-cli/) to obtain a license to download the signature set.
+Visit [https://www.wordfence.com/products/wordfence-cli/](https://www.wordfence.com/products/wordfence-cli/) to obtain
+a license to download the signature set.
 
 ## Usage
 
@@ -276,9 +277,11 @@ wordfence malware-scan --profile balanced /app/dist || exit 1
 
 #### Dynamic Resource Monitor Examples
 
-The `--profile adaptive` enables a dynamic resource monitor that continuously adjusts scanning parameters based on real-time system metrics:
+The `--profile adaptive` enables a dynamic resource monitor that continuously adjusts scanning parameters based on
+real-time system metrics:
 
 **What the Resource Monitor Tracks:**
+
 - Memory usage (heap allocation, GC pressure)
 - System load average (1/5/15 minute)
 - Goroutine scheduling latency
@@ -370,6 +373,7 @@ wordfence malware-scan --pipeline \
 | Stage statistics | ❌ | ✅ Per-stage metrics |
 
 **When to Use Pipeline Mode:**
+
 - Scanning >10,000 files
 - Network/cloud storage with potential I/O errors
 - Environments with duplicate files (hardlinks, backups)
@@ -544,6 +548,7 @@ ionice -c 2 -n 7 nice -n 10 wordfence malware-scan --workers 2 --license "$WORDF
 **Nice values:** `-20` (highest priority, needs root) to `19` (lowest/most polite). Default is `0`.
 
 **ionice classes:**
+
 - `-c 1` = Real-time (needs root)
 - `-c 2` = Best-effort (default), with `-n 0-7` priority (7 = lowest)
 - `-c 3` = Idle (only runs when no other I/O)
@@ -602,7 +607,8 @@ verbose = on
 
 ### Resource Control (Internal Defaults)
 
-These options control resource usage during scanning. They are currently set internally but can be adjusted in the source code:
+These options control resource usage during scanning. They are currently set internally but can be adjusted in the
+source code:
 
 | Option | Description | Default |
 | ------ | ------------- | ------- |

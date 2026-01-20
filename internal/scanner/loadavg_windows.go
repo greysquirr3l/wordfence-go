@@ -4,7 +4,13 @@ package scanner
 
 import (
 	"context"
+	"errors"
 )
+
+// getLoadAvg returns an error on Windows (not supported)
+func getLoadAvg() (float64, error) {
+	return 0, errors.New("load average not supported on Windows")
+}
 
 // checkLoadAverage returns false on Windows (not supported)
 func (s *Scanner) checkLoadAverage() bool {
