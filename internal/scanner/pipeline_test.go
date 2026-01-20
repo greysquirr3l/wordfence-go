@@ -168,7 +168,7 @@ func TestBufferPoolHitRate(t *testing.T) {
 	pool := NewContentPool()
 
 	// First get creates new buffers
-	buf1 := pool.GetForSize(1024)     // small
+	buf1 := pool.GetForSize(1024)      // small
 	buf2 := pool.GetForSize(32 * 1024) // medium
 
 	// Return buffers
@@ -252,5 +252,82 @@ func TestDrainResults(t *testing.T) {
 	count := DrainResults(results)
 	if count != 5 {
 		t.Errorf("Expected 5 drained results, got %d", count)
+	}
+}
+
+func TestPipelineScannerDuplicateMalwareDetection(t *testing.T) {
+	// Create a temporary directory with duplicate files containing malware
+	tmpDir, err := os.MkdirTemp("", "pipeline_dup_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create identical malware files in different locations
+	malwareContent := []byte("<?php eval(base64_decode('malicious_code')); ?>")
+
+	// Create multiple identical files
+	files := []string{
+		filepath.Join(tmpDir, "file1.php"),
+		filepath.Join(tmpDir, "subdir1", "file2.php"),
+		filepath.Join(tmpDir, "subdir2", "file3.php"),
+	}
+
+	for _, f := range files {
+		dir := filepath.Dir(f)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, malwareContent, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create signature set
+	sigSet := createPipelineTestSignatureSet()
+
+	scanner := NewPipelineScanner(sigSet,
+		WithPipelineWorkers(2),
+		WithPipelineMatchTimeout(time.Second),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	results, err := scanner.Scan(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	// Collect all results
+	var matchedFiles []string
+	for result := range results {
+		if result.Error != nil {
+			t.Logf("Scan error: %v", result.Error)
+			continue
+		}
+		if result.HasMatches() {
+			matchedFiles = append(matchedFiles, result.Path)
+			t.Logf("Found %d matches in %s", len(result.Matches), result.Path)
+		}
+	}
+
+	// CRITICAL: All duplicate files with malware MUST be reported
+	// Deduplication should cache results, not skip reporting
+	if len(matchedFiles) != 3 {
+		t.Errorf("Expected 3 files with matches (all duplicates should be reported), got %d: %v",
+			len(matchedFiles), matchedFiles)
+	}
+
+	// Verify stats
+	stats := scanner.GetStats()
+	t.Logf("Stats: Discovered=%d, Duplicates=%d, FilesWithMatches=%d",
+		stats.Discovered, stats.DuplicatesSkipped, stats.FilesWithMatches)
+
+	// Whether files are detected as duplicates depends on processing order
+	// The critical assertion is that ALL files with malware are reported
+	// FilesWithMatches should be 3 regardless of duplicate detection
+	if stats.FilesWithMatches != 3 {
+		t.Errorf("Expected 3 files with matches reported, got %d", stats.FilesWithMatches)
 	}
 }

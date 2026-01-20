@@ -211,7 +211,8 @@ wordfence malware-scan --pipeline --workers 4 --max-file-size 50 /var/www
 ```
 
 **Pipeline output includes additional statistics:**
-```
+
+```bash
 Pipeline scan complete:
   Stage: Discovered: 1542 → Filtered: 876 → Read: 876 → Matched: 876 → Reported: 876
   Files with matches: 3
@@ -221,6 +222,230 @@ Pipeline scan complete:
   Bytes scanned: 42 MB
   Duration: 12.345s
   Buffer pool hit rate: 87.3%
+```
+
+#### Real-World Profile Usage Examples
+
+##### Scenario 1: Shared Hosting with Limited Resources
+
+On shared hosting where you must minimize impact on other tenants:
+
+```bash
+# Ultra-conservative scanning during business hours
+wordfence malware-scan --profile gentle /home/*/public_html
+
+# Slightly faster after-hours scanning
+wordfence malware-scan --profile gentle --scan-delay 50 /home/*/public_html
+```
+
+##### Scenario 2: Dedicated Server with Variable Load
+
+For servers where load fluctuates (e.g., e-commerce during sales):
+
+```bash
+# Adaptive profile automatically throttles when load increases
+wordfence malware-scan --profile adaptive /var/www
+
+# Adaptive with memory ceiling for container environments
+wordfence malware-scan --profile adaptive --memory-limit 512 /var/www
+```
+
+##### Scenario 3: Off-Peak Maintenance Window
+
+When you have full server resources available:
+
+```bash
+# Maximum speed during 2AM-4AM maintenance window
+wordfence malware-scan --profile aggressive /var/www
+
+# Aggressive with JSON output for integration with monitoring
+wordfence malware-scan --profile aggressive --output-format json --output /var/log/wordfence/scan.json /var/www
+```
+
+##### Scenario 4: CI/CD Pipeline Scanning
+
+For automated security scanning in deployment pipelines:
+
+```bash
+# Fast scanning with structured output for CI parsing
+wordfence malware-scan --profile aggressive --output-format json /app/dist
+
+# Exit with non-zero status if malware found (for CI gates)
+wordfence malware-scan --profile balanced /app/dist || exit 1
+```
+
+#### Dynamic Resource Monitor Examples
+
+The `--profile adaptive` enables a dynamic resource monitor that continuously adjusts scanning parameters based on real-time system metrics:
+
+**What the Resource Monitor Tracks:**
+- Memory usage (heap allocation, GC pressure)
+- System load average (1/5/15 minute)
+- Goroutine scheduling latency
+- I/O throughput
+
+**Throttle Levels:**
+
+| Level | Trigger | Response |
+| ----- | ------- | -------- |
+| 0 (None) | Normal operation | Full speed scanning |
+| 1 (Light) | Memory >50%, Load >100% target | Half workers, 50ms delay |
+| 2 (Medium) | Memory >75%, Load >120% target | Quarter workers, 100ms delay |
+| 3 (Heavy) | Memory >90%, Load >150% target | Single worker, 200ms delay |
+
+```bash
+# Adaptive scanning with verbose output to see throttle adjustments
+wordfence malware-scan --profile adaptive --verbose /var/www
+
+# Output will show:
+# [INFO] Using performance profile: adaptive
+# [INFO] Adaptive mode: resource monitor will dynamically adjust settings
+# [DEBUG] Throttle level: 0 → 1 (memory pressure: 52%)
+# [DEBUG] Throttle level: 1 → 0 (pressure relieved)
+```
+
+**Adaptive Profile with Manual Overrides:**
+
+```bash
+# Adaptive with custom memory ceiling
+wordfence malware-scan --profile adaptive --memory-limit 256 /var/www
+
+# Adaptive with custom load threshold (for busy servers)
+wordfence malware-scan --profile adaptive --max-load 8.0 /var/www
+
+# Adaptive with worker ceiling (limit parallelism)
+wordfence malware-scan --profile adaptive --workers 4 /var/www
+```
+
+#### Advanced Pipeline Mode Examples
+
+The pipeline scanner provides enterprise-grade features for large-scale scanning:
+
+**Pipeline with Full Resource Management:**
+
+```bash
+# Enterprise setup: all safety features enabled
+wordfence malware-scan --pipeline \
+  --io-rate-limit 20 \
+  --memory-limit 512 \
+  --max-file-size 100 \
+  --workers 8 \
+  /data/websites
+
+# Cloud storage scanning (handle transient errors)
+wordfence malware-scan --pipeline \
+  --allow-io-errors \
+  --io-rate-limit 50 \
+  /mnt/s3-bucket
+```
+
+**Pipeline with Batch Processing:**
+
+For very large scans that need periodic pauses (e.g., to allow backups):
+
+```bash
+# Scan 500 files, pause 5 seconds, repeat
+wordfence malware-scan --pipeline \
+  --batch-size 500 \
+  --batch-pause 5000 \
+  /var/www
+
+# Gentle batched scanning for 24/7 production
+wordfence malware-scan --pipeline \
+  --profile gentle \
+  --batch-size 100 \
+  --batch-pause 2000 \
+  /var/www
+```
+
+**Pipeline vs Traditional Scanner:**
+
+| Feature | Traditional | Pipeline |
+| ------- | ----------- | -------- |
+| Buffer reuse | ❌ | ✅ Tiered pool (4KB/64KB/1MB) |
+| Duplicate detection | ❌ | ✅ Content hash deduplication |
+| Circuit breaker | ❌ | ✅ Prevents cascading failures |
+| Smooth rate limiting | Basic | ✅ Token bucket with burst |
+| Graceful shutdown | ❌ | ✅ Proper cleanup |
+| Stage statistics | ❌ | ✅ Per-stage metrics |
+
+**When to Use Pipeline Mode:**
+- Scanning >10,000 files
+- Network/cloud storage with potential I/O errors
+- Environments with duplicate files (hardlinks, backups)
+- When you need detailed scan metrics
+- Long-running scans that may be interrupted
+
+```bash
+# Large website farm with detailed logging
+wordfence malware-scan --pipeline \
+  --output-format json \
+  --output /var/log/wordfence/scan-$(date +%Y%m%d).json \
+  --verbose \
+  /home/*/public_html 2>&1 | tee /var/log/wordfence/scan.log
+```
+
+#### Combining Features: Production Recipes
+
+##### Recipe 1: Managed WordPress Host (Multi-tenant)
+
+```bash
+# Scan all tenant sites with minimal impact
+wordfence malware-scan \
+  --profile gentle \
+  --pipeline \
+  --output-format csv \
+  --output /var/log/wordfence/daily-scan.csv \
+  --exclude-pattern "\.git|node_modules|vendor" \
+  /home/*/public_html
+```
+
+##### Recipe 2: High-Traffic E-commerce (Scan During Low Traffic)
+
+```bash
+# Aggressive night scan with full reporting
+0 3 * * * /usr/local/bin/wordfence malware-scan \
+  --profile aggressive \
+  --pipeline \
+  --output-format json \
+  --output /var/log/wordfence/nightly.json \
+  /var/www/magento 2>&1 >> /var/log/wordfence/nightly.log
+```
+
+##### Recipe 3: Container/Kubernetes Environment
+
+```bash
+# Resource-bounded scanning in containers
+wordfence malware-scan \
+  --profile balanced \
+  --memory-limit 256 \
+  --workers 2 \
+  --output-format json \
+  /app
+```
+
+##### Recipe 4: Continuous Security Monitoring
+
+```bash
+# Watch for new/modified PHP files and scan immediately
+inotifywait -m -r -e create -e modify --include '\.php$' /var/www | \
+while read dir event file; do
+  wordfence malware-scan --profile aggressive "${dir}${file}"
+done
+```
+
+##### Recipe 5: Post-Incident Forensics
+
+```bash
+# Thorough scan after suspected breach
+wordfence malware-scan \
+  --profile aggressive \
+  --pipeline \
+  --include-all-files \
+  --follow-symlinks \
+  --output-format json \
+  --output /root/forensics/full-scan.json \
+  /var/www /home /tmp
 ```
 
 ### Vulnerability Scanning

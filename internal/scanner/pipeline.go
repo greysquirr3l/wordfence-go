@@ -82,10 +82,16 @@ type PipelineScanner struct {
 	stats     PipelineStats
 	statsLock sync.Mutex
 
-	// Idempotency
+	// Idempotency - track content hashes and their match results
 	scanID       string
 	processedMu  sync.RWMutex
-	processedSet map[string]bool // Track processed files by content hash
+	processedSet map[string]*duplicateResult // Track processed files and their matches
+}
+
+// duplicateResult stores the scan result for a content hash
+type duplicateResult struct {
+	Matches  []*MatchResult
+	Timeouts []int
 }
 
 // PipelineStats holds detailed statistics for each pipeline stage
@@ -210,7 +216,7 @@ func NewPipelineScanner(sigSet *intel.SignatureSet, opts ...PipelineOption) *Pip
 		logger:       logging.New(logging.LevelInfo),
 		bufferPool:   NewContentPool(),
 		done:         make(chan struct{}),
-		processedSet: make(map[string]bool),
+		processedSet: make(map[string]*duplicateResult),
 	}
 
 	for _, opt := range opts {
@@ -541,13 +547,24 @@ func (p *PipelineScanner) startReadStage(ctx context.Context) {
 				h := sha256.Sum256(item.Content)
 				item.ContentHash = hex.EncodeToString(h[:])
 
-				// Check for duplicate content
-				if p.isDuplicate(item.ContentHash) {
+				// Check for duplicate content - if already scanned, use cached results
+				if cached := p.getDuplicateResult(item.ContentHash); cached != nil {
 					atomic.AddInt64(&p.stats.DuplicatesSkipped, 1)
 					p.returnBuffer(item)
+					// Report matches for this duplicate file path
+					if len(cached.Matches) > 0 {
+						item.Matches = cached.Matches
+						item.Timeouts = cached.Timeouts
+						item.Stage = StageMatch
+						atomic.AddInt64(&p.stats.FilesWithMatches, 1)
+						select {
+						case <-ctx.Done():
+							return
+						case p.matched <- item:
+						}
+					}
 					continue
 				}
-				p.markProcessed(item.ContentHash)
 
 				atomic.AddInt64(&p.stats.Read, 1)
 				atomic.AddInt64(&p.stats.BytesScanned, int64(len(item.Content)))
@@ -584,11 +601,18 @@ func (p *PipelineScanner) readFileContent(item *FileItem) error {
 		size = p.options.ContentLimit
 	}
 
-	// Get pooled buffer
+	// Get pooled buffer - buffer may be smaller than requested size for large files
 	item.Content = p.bufferPool.GetForSize(size)
 	item.ContentPool = p.bufferPool
 
-	n, err := io.ReadFull(file, item.Content[:size])
+	// Limit read to actual buffer capacity
+	readSize := size
+	bufCap := int64(cap(item.Content))
+	if readSize > bufCap {
+		readSize = bufCap
+	}
+
+	n, err := io.ReadFull(file, item.Content[:readSize])
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		p.returnBuffer(item)
 		item.Error = ErrFileRead(item.Path, err)
@@ -663,6 +687,11 @@ func (p *PipelineScanner) startMatchStage(ctx context.Context) {
 				item.ScanDuration = time.Since(start)
 				item.Stage = StageMatch
 
+				// Store results for duplicate detection (before returning buffer)
+				if item.ContentHash != "" {
+					p.storeResult(item.ContentHash, item.Matches, item.Timeouts)
+				}
+
 				// Return buffer after matching
 				p.returnBuffer(item)
 
@@ -730,18 +759,21 @@ func (p *PipelineScanner) startReportStage(ctx context.Context, results chan<- *
 	}()
 }
 
-// isDuplicate checks if a content hash has been processed
-func (p *PipelineScanner) isDuplicate(hash string) bool {
+// getDuplicateResult returns cached match results if this hash was already processed
+func (p *PipelineScanner) getDuplicateResult(hash string) *duplicateResult {
 	p.processedMu.RLock()
 	defer p.processedMu.RUnlock()
 	return p.processedSet[hash]
 }
 
-// markProcessed marks a content hash as processed
-func (p *PipelineScanner) markProcessed(hash string) {
+// storeResult stores match results for a content hash (called after matching)
+func (p *PipelineScanner) storeResult(hash string, matches []*MatchResult, timeouts []int) {
 	p.processedMu.Lock()
 	defer p.processedMu.Unlock()
-	p.processedSet[hash] = true
+	p.processedSet[hash] = &duplicateResult{
+		Matches:  matches,
+		Timeouts: timeouts,
+	}
 }
 
 // isShutdown checks if shutdown has been initiated
