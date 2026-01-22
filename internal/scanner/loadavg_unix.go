@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-// getLoadAvg returns the 1-minute load average on Unix systems
+// getLoadAvg returns the 1-minute load average on Unix systems.
+// Note: This reads from /proc/loadavg which is Linux-specific.
+// On macOS and other BSD systems, this will fail gracefully and return an error.
+// For production use on macOS, consider using sysctl or syscall.Getloadavg.
 func getLoadAvg() (float64, error) {
 	data, err := os.ReadFile("/proc/loadavg")
 	if err != nil {

@@ -90,8 +90,9 @@ type PipelineScanner struct {
 
 // duplicateResult stores the scan result for a content hash
 type duplicateResult struct {
-	Matches  []*MatchResult
-	Timeouts []int
+	Matches      []*MatchResult
+	Timeouts     []int
+	ContentSize  int64 // Size of content for ScannedBytes reporting
 }
 
 // PipelineStats holds detailed statistics for each pipeline stage
@@ -550,13 +551,17 @@ func (p *PipelineScanner) startReadStage(ctx context.Context) {
 				// Check for duplicate content - if already scanned, use cached results
 				if cached := p.getDuplicateResult(item.ContentHash); cached != nil {
 					atomic.AddInt64(&p.stats.DuplicatesSkipped, 1)
+					contentSize := cached.ContentSize
 					p.returnBuffer(item)
 					// Report matches for this duplicate file path
 					if len(cached.Matches) > 0 {
 						item.Matches = cached.Matches
 						item.Timeouts = cached.Timeouts
 						item.Stage = StageMatch
+						// Use cached content size since buffer was returned
+						item.Content = make([]byte, 0, contentSize)
 						atomic.AddInt64(&p.stats.FilesWithMatches, 1)
+						atomic.AddInt64(&p.stats.BytesScanned, contentSize)
 						select {
 						case <-ctx.Done():
 							return
@@ -689,7 +694,8 @@ func (p *PipelineScanner) startMatchStage(ctx context.Context) {
 
 				// Store results for duplicate detection (before returning buffer)
 				if item.ContentHash != "" {
-					p.storeResult(item.ContentHash, item.Matches, item.Timeouts)
+					contentSize := int64(len(item.Content))
+					p.storeResult(item.ContentHash, item.Matches, item.Timeouts, contentSize)
 				}
 
 				// Return buffer after matching
@@ -767,12 +773,13 @@ func (p *PipelineScanner) getDuplicateResult(hash string) *duplicateResult {
 }
 
 // storeResult stores match results for a content hash (called after matching)
-func (p *PipelineScanner) storeResult(hash string, matches []*MatchResult, timeouts []int) {
+func (p *PipelineScanner) storeResult(hash string, matches []*MatchResult, timeouts []int, contentSize int64) {
 	p.processedMu.Lock()
 	defer p.processedMu.Unlock()
 	p.processedSet[hash] = &duplicateResult{
-		Matches:  matches,
-		Timeouts: timeouts,
+		Matches:     matches,
+		Timeouts:    timeouts,
+		ContentSize: contentSize,
 	}
 }
 

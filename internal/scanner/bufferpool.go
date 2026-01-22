@@ -51,8 +51,8 @@ func (bp *BufferPool) Get() []byte {
 
 // Put returns a buffer to the pool
 func (bp *BufferPool) Put(buf []byte) {
-	// Only return buffers of the correct size to avoid memory issues
-	if cap(buf) >= bp.size {
+	// Only pool buffers that match the pool size exactly to prevent memory waste
+	if cap(buf) == bp.size {
 		bp.statsmu.Lock()
 		bp.puts++
 		bp.statsmu.Unlock()

@@ -331,3 +331,87 @@ func TestPipelineScannerDuplicateMalwareDetection(t *testing.T) {
 		t.Errorf("Expected 3 files with matches reported, got %d", stats.FilesWithMatches)
 	}
 }
+
+func TestPipelineScannerDuplicateCleanFiles(t *testing.T) {
+	// Create a temporary directory with duplicate clean files
+	tmpDir, err := os.MkdirTemp("", "pipeline_dup_clean_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create identical clean files in different locations
+	cleanContent := []byte("<?php echo 'Hello, World!'; ?>")
+
+	// Create multiple identical clean files
+	files := []string{
+		filepath.Join(tmpDir, "clean1.php"),
+		filepath.Join(tmpDir, "subdir1", "clean2.php"),
+		filepath.Join(tmpDir, "subdir2", "clean3.php"),
+	}
+
+	for _, f := range files {
+		dir := filepath.Dir(f)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, cleanContent, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create signature set
+	sigSet := createPipelineTestSignatureSet()
+
+	scanner := NewPipelineScanner(sigSet,
+		WithPipelineWorkers(2),
+		WithPipelineMatchTimeout(time.Second),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	results, err := scanner.Scan(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	// Collect all results
+	var matchedFiles []string
+	for result := range results {
+		if result.Error != nil {
+			t.Logf("Scan error: %v", result.Error)
+			continue
+		}
+		if result.HasMatches() {
+			matchedFiles = append(matchedFiles, result.Path)
+			t.Logf("Found %d matches in %s", len(result.Matches), result.Path)
+		}
+	}
+
+	// Clean files should have no matches
+	if len(matchedFiles) != 0 {
+		t.Errorf("Expected 0 files with matches for clean files, got %d: %v",
+			len(matchedFiles), matchedFiles)
+	}
+
+	// Verify stats - duplicates should be detected
+	stats := scanner.GetStats()
+	t.Logf("Stats: Discovered=%d, Filtered=%d, Read=%d, Duplicates=%d, FilesWithMatches=%d",
+		stats.Discovered, stats.Filtered, stats.Read, stats.DuplicatesSkipped, stats.FilesWithMatches)
+
+	// All 3 files should be discovered and filtered
+	if stats.Discovered < 3 {
+		t.Errorf("Expected at least 3 discovered files, got %d", stats.Discovered)
+	}
+	if stats.Filtered < 3 {
+		t.Errorf("Expected at least 3 filtered files, got %d", stats.Filtered)
+	}
+
+	// First file is read normally, subsequent duplicates skip read stage
+	// So we should have 1 read and 2 duplicates skipped
+	if stats.Read < 1 {
+		t.Errorf("Expected at least 1 file read, got %d", stats.Read)
+	}
+}
+

@@ -204,7 +204,8 @@ func NewResourceMonitor(opts ...MonitorOption) *ResourceMonitor {
 
 	// Set defaults
 	numCPU := runtime.NumCPU()
-	if numCPU > 0 && numCPU <= 1<<30 { // reasonable range for int32
+	// int32 max is 2^31-1 (2,147,483,647), but realistically no system has that many CPUs
+	if numCPU > 0 && numCPU <= (1<<31-1) {
 		m.targetWorkers.Store(int32(numCPU)) //#nosec G115 -- validated range
 	} else {
 		m.targetWorkers.Store(4) // fallback
@@ -459,7 +460,8 @@ func (m *ResourceMonitor) adjustResources() {
 
 	// Apply changes
 	m.throttleLevel.Store(newLevel)
-	if workers > 0 && workers <= 1<<30 { // reasonable range for int32
+	// int32 max is 2^31-1 (2,147,483,647)
+	if workers > 0 && workers <= (1<<31-1) {
 		m.targetWorkers.Store(int32(workers)) //#nosec G115 -- validated range
 	}
 	m.targetDelay.Store(delayNS)
