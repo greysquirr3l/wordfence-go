@@ -1,8 +1,8 @@
 # Wordfence CLI (Go)
 
 Wordfence CLI is a high-performance, multi-threaded security scanner that quickly scans filesystems to detect PHP/other
-malware and WordPress vulnerabilities. This is a Go port of the [official Python Wordfence CLI](https://github.com/wordfence/wordfence-cli) designed for static binary
-deployment on legacy Linux systems.
+malware and WordPress vulnerabilities. This is a Go port of the [official Python Wordfence CLI](https://github.com/wordfence/wordfence-cli)
+designed for static binary deployment on legacy Linux systems.
 
 ## Features
 
@@ -54,7 +54,8 @@ make build-embedded-linux-amd64
 
 ### Obtaining a license
 
-Visit [https://www.wordfence.com/products/wordfence-cli/](https://www.wordfence.com/products/wordfence-cli/) to obtain a license to download the signature set.
+Visit [https://www.wordfence.com/products/wordfence-cli/](https://www.wordfence.com/products/wordfence-cli/) to obtain
+a license to download the signature set.
 
 ## Usage
 
@@ -93,6 +94,362 @@ wordfence malware-scan --include-all-files /var/www
 
 # Use multiple workers for faster scanning
 wordfence malware-scan --workers 8 /var/www
+
+# Low-resource scan (reduced workers, delay between files)
+wordfence malware-scan --workers 1 --scan-delay 50 /var/www
+
+# Use a performance profile (recommended for production)
+wordfence malware-scan --profile gentle /var/www
+```
+
+#### Performance Profiles
+
+For easy resource management, use predefined performance profiles:
+
+| Profile | Description | Best For |
+| --------- | ------------- | ---------- |
+| `gentle` | Minimal resource usage, very slow | Shared hosting, production servers under load |
+| `balanced` | Moderate speed and resources | General production use |
+| `aggressive` | Maximum speed, high resource usage | Dedicated servers, off-peak scanning |
+| `adaptive` | Dynamically adjusts based on system load | Servers with variable load |
+
+```bash
+# Production-safe scanning
+wordfence malware-scan --profile gentle /var/www
+
+# Default balanced scanning
+wordfence malware-scan --profile balanced /var/www
+
+# Fast scanning on dedicated servers
+wordfence malware-scan --profile aggressive /var/www
+
+# Adaptive scanning (auto-throttles under load)
+wordfence malware-scan --profile adaptive /var/www
+
+# Profile with overrides
+wordfence malware-scan --profile balanced --workers 4 /var/www
+```
+
+**Profile Settings:**
+
+| Setting | Gentle | Balanced | Aggressive |
+| --------- | -------- | ---------- | ------------ |
+| Workers | 1 | NumCPU/2 | NumCPU |
+| Scan Delay | 100ms | 25ms | 0 |
+| Memory Limit | 256MB | 512MB | Unlimited |
+| Max Load Avg | 2.0 | NumCPU×0.75 | Unlimited |
+| I/O Limit | 5 MB/s | 20 MB/s | Unlimited |
+| Batch Size | 50 files | 100 files | None |
+
+#### Resource Control Options
+
+The malware scanner provides several options to control resource utilization, particularly useful for production servers:
+
+| Flag | Description | Default |
+| ------ | ------------- | --------- |
+| `--workers N` | Number of concurrent scanning workers | NumCPU |
+| `--scan-delay MS` | Delay in milliseconds between files (reduces CPU/IO pressure) | 0 |
+| `--chunk-size KB` | Memory buffer size for reading files | 1024 KB |
+| `--max-file-size MB` | Maximum file size to scan (0 = unlimited) | 0 |
+| `--match-timeout SEC` | Timeout for each regex match | 1 sec |
+| `--allow-io-errors` | Continue on file read errors | false |
+| `--follow-symlinks` | Follow symbolic links | false |
+
+**Advanced Resource Control:**
+
+| Flag | Description | Default |
+| ------ | ------------- | --------- |
+| `--memory-limit MB` | Pause scanning when memory exceeds limit | Unlimited |
+| `--io-rate-limit MB/s` | Maximum disk read speed | Unlimited |
+| `--batch-size N` | Scan N files then pause (use with `--batch-pause`) | Disabled |
+| `--batch-pause MS` | Pause duration after each batch | Disabled |
+| `--max-load FLOAT` | Pause when system load exceeds value (Unix only) | Unlimited |
+
+**Examples for resource-constrained environments:**
+
+```bash
+# Gentle scan: single worker with 50ms delay between files
+wordfence malware-scan --workers 1 --scan-delay 50 /var/www
+
+# Memory-efficient: smaller chunk size
+wordfence malware-scan --chunk-size 256 /var/www
+
+# Skip large files (over 10MB)
+wordfence malware-scan --max-file-size 10 /var/www
+
+# Combined: production-safe settings
+wordfence malware-scan --workers 2 --scan-delay 25 --max-file-size 50 /var/www
+
+# Advanced: memory and I/O limiting
+wordfence malware-scan --memory-limit 256 --io-rate-limit 10 /var/www
+
+# Advanced: batch processing with pauses
+wordfence malware-scan --batch-size 100 --batch-pause 1000 /var/www
+
+# Advanced: load-aware scanning (Unix)
+wordfence malware-scan --max-load 4.0 /var/www
+```
+
+#### Pipeline Mode (Advanced)
+
+The `--pipeline` flag enables an advanced scanning architecture with additional features:
+
+| Feature | Description |
+| ------- | ----------- |
+| **Staged Pipeline** | Files flow through: discover → filter → read → match → report |
+| **Buffer Pooling** | Reuses memory buffers (tiered: 4KB/64KB/1MB) to reduce allocations |
+| **Token Bucket Rate Limiting** | Smooth I/O throttling with burst support |
+| **Circuit Breaker** | Prevents cascading failures from I/O errors |
+| **Idempotency** | Content hashing detects duplicate files |
+| **Graceful Shutdown** | Proper cleanup on cancellation |
+
+```bash
+# Use pipeline scanner with I/O rate limiting
+wordfence malware-scan --pipeline --io-rate-limit 10 /var/www
+
+# Pipeline with all advanced features
+wordfence malware-scan --pipeline --workers 4 --max-file-size 50 /var/www
+```
+
+**Pipeline output includes additional statistics:**
+
+```bash
+Pipeline scan complete:
+  Stage: Discovered: 1542 → Filtered: 876 → Read: 876 → Matched: 876 → Reported: 876
+  Files with matches: 3
+  Files skipped: 666
+  Duplicates skipped: 12
+  Total matches: 5
+  Bytes scanned: 42 MB
+  Duration: 12.345s
+  Buffer pool hit rate: 87.3%
+```
+
+#### Real-World Profile Usage Examples
+
+##### Scenario 1: Shared Hosting with Limited Resources
+
+On shared hosting where you must minimize impact on other tenants:
+
+```bash
+# Ultra-conservative scanning during business hours
+wordfence malware-scan --profile gentle /home/*/public_html
+
+# Slightly faster after-hours scanning
+wordfence malware-scan --profile gentle --scan-delay 50 /home/*/public_html
+```
+
+##### Scenario 2: Dedicated Server with Variable Load
+
+For servers where load fluctuates (e.g., e-commerce during sales):
+
+```bash
+# Adaptive profile automatically throttles when load increases
+wordfence malware-scan --profile adaptive /var/www
+
+# Adaptive with memory ceiling for container environments
+wordfence malware-scan --profile adaptive --memory-limit 512 /var/www
+```
+
+##### Scenario 3: Off-Peak Maintenance Window
+
+When you have full server resources available:
+
+```bash
+# Maximum speed during 2AM-4AM maintenance window
+wordfence malware-scan --profile aggressive /var/www
+
+# Aggressive with JSON output for integration with monitoring
+wordfence malware-scan --profile aggressive --output-format json --output /var/log/wordfence/scan.json /var/www
+```
+
+##### Scenario 4: CI/CD Pipeline Scanning
+
+For automated security scanning in deployment pipelines:
+
+```bash
+# Fast scanning with structured output for CI parsing
+wordfence malware-scan --profile aggressive --output-format json /app/dist
+
+# Exit with non-zero status if malware found (for CI gates)
+wordfence malware-scan --profile balanced /app/dist || exit 1
+```
+
+#### Dynamic Resource Monitor Examples
+
+The `--profile adaptive` enables a dynamic resource monitor that continuously adjusts scanning parameters based on
+real-time system metrics:
+
+**What the Resource Monitor Tracks:**
+
+- Memory usage (heap allocation, GC pressure)
+- System load average (1/5/15 minute)
+- Goroutine scheduling latency
+- I/O throughput
+
+**Throttle Levels:**
+
+| Level | Trigger | Response |
+| ----- | ------- | -------- |
+| 0 (None) | Normal operation | Full speed scanning |
+| 1 (Light) | Memory >50%, Load >100% target | Half workers, 50ms delay |
+| 2 (Medium) | Memory >75%, Load >120% target | Quarter workers, 100ms delay |
+| 3 (Heavy) | Memory >90%, Load >150% target | Single worker, 200ms delay |
+
+```bash
+# Adaptive scanning with verbose output to see throttle adjustments
+wordfence malware-scan --profile adaptive --verbose /var/www
+
+# Output will show:
+# [INFO] Using performance profile: adaptive
+# [INFO] Adaptive mode: resource monitor will dynamically adjust settings
+# [DEBUG] Throttle level: 0 → 1 (memory pressure: 52%)
+# [DEBUG] Throttle level: 1 → 0 (pressure relieved)
+```
+
+**Adaptive Profile with Manual Overrides:**
+
+```bash
+# Adaptive with custom memory ceiling
+wordfence malware-scan --profile adaptive --memory-limit 256 /var/www
+
+# Adaptive with custom load threshold (for busy servers)
+wordfence malware-scan --profile adaptive --max-load 8.0 /var/www
+
+# Adaptive with worker ceiling (limit parallelism)
+wordfence malware-scan --profile adaptive --workers 4 /var/www
+```
+
+#### Advanced Pipeline Mode Examples
+
+The pipeline scanner provides enterprise-grade features for large-scale scanning:
+
+**Pipeline with Full Resource Management:**
+
+```bash
+# Enterprise setup: all safety features enabled
+wordfence malware-scan --pipeline \
+  --io-rate-limit 20 \
+  --memory-limit 512 \
+  --max-file-size 100 \
+  --workers 8 \
+  /data/websites
+
+# Cloud storage scanning (handle transient errors)
+wordfence malware-scan --pipeline \
+  --allow-io-errors \
+  --io-rate-limit 50 \
+  /mnt/s3-bucket
+```
+
+**Pipeline with Batch Processing:**
+
+For very large scans that need periodic pauses (e.g., to allow backups):
+
+```bash
+# Scan 500 files, pause 5 seconds, repeat
+wordfence malware-scan --pipeline \
+  --batch-size 500 \
+  --batch-pause 5000 \
+  /var/www
+
+# Gentle batched scanning for 24/7 production
+wordfence malware-scan --pipeline \
+  --profile gentle \
+  --batch-size 100 \
+  --batch-pause 2000 \
+  /var/www
+```
+
+**Pipeline vs Traditional Scanner:**
+
+| Feature | Traditional | Pipeline |
+| ------- | ----------- | -------- |
+| Buffer reuse | ❌ | ✅ Tiered pool (4KB/64KB/1MB) |
+| Duplicate detection | ❌ | ✅ Content hash deduplication |
+| Circuit breaker | ❌ | ✅ Prevents cascading failures |
+| Smooth rate limiting | Basic | ✅ Token bucket with burst |
+| Graceful shutdown | ❌ | ✅ Proper cleanup |
+| Stage statistics | ❌ | ✅ Per-stage metrics |
+
+**When to Use Pipeline Mode:**
+
+- Scanning >10,000 files
+- Network/cloud storage with potential I/O errors
+- Environments with duplicate files (hardlinks, backups)
+- When you need detailed scan metrics
+- Long-running scans that may be interrupted
+
+```bash
+# Large website farm with detailed logging
+wordfence malware-scan --pipeline \
+  --output-format json \
+  --output /var/log/wordfence/scan-$(date +%Y%m%d).json \
+  --verbose \
+  /home/*/public_html 2>&1 | tee /var/log/wordfence/scan.log
+```
+
+#### Combining Features: Production Recipes
+
+##### Recipe 1: Managed WordPress Host (Multi-tenant)
+
+```bash
+# Scan all tenant sites with minimal impact
+wordfence malware-scan \
+  --profile gentle \
+  --pipeline \
+  --output-format csv \
+  --output /var/log/wordfence/daily-scan.csv \
+  --exclude-pattern "\.git|node_modules|vendor" \
+  /home/*/public_html
+```
+
+##### Recipe 2: High-Traffic E-commerce (Scan During Low Traffic)
+
+```bash
+# Aggressive night scan with full reporting
+0 3 * * * /usr/local/bin/wordfence malware-scan \
+  --profile aggressive \
+  --pipeline \
+  --output-format json \
+  --output /var/log/wordfence/nightly.json \
+  /var/www/magento 2>&1 >> /var/log/wordfence/nightly.log
+```
+
+##### Recipe 3: Container/Kubernetes Environment
+
+```bash
+# Resource-bounded scanning in containers
+wordfence malware-scan \
+  --profile balanced \
+  --memory-limit 256 \
+  --workers 2 \
+  --output-format json \
+  /app
+```
+
+##### Recipe 4: Continuous Security Monitoring
+
+```bash
+# Watch for new/modified PHP files and scan immediately
+inotifywait -m -r -e create -e modify --include '\.php$' /var/www | \
+while read dir event file; do
+  wordfence malware-scan --profile aggressive "${dir}${file}"
+done
+```
+
+##### Recipe 5: Post-Incident Forensics
+
+```bash
+# Thorough scan after suspected breach
+wordfence malware-scan \
+  --profile aggressive \
+  --pipeline \
+  --include-all-files \
+  --follow-symlinks \
+  --output-format json \
+  --output /root/forensics/full-scan.json \
+  /var/www /home /tmp
 ```
 
 ### Vulnerability Scanning
@@ -191,6 +548,7 @@ ionice -c 2 -n 7 nice -n 10 wordfence malware-scan --workers 2 --license "$WORDF
 **Nice values:** `-20` (highest priority, needs root) to `19` (lowest/most polite). Default is `0`.
 
 **ionice classes:**
+
 - `-c 1` = Real-time (needs root)
 - `-c 2` = Best-effort (default), with `-n 0-7` priority (7 = lowest)
 - `-c 3` = Idle (only runs when no other I/O)
@@ -249,7 +607,8 @@ verbose = on
 
 ### Resource Control (Internal Defaults)
 
-These options control resource usage during scanning. They are currently set internally but can be adjusted in the source code:
+These options control resource usage during scanning. They are currently set internally but can be adjusted in the
+source code:
 
 | Option | Description | Default |
 | ------ | ------------- | ------- |

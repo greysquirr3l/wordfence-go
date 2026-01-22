@@ -7,8 +7,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
-	"github.com/dlclark/regexp2"
+	ahocorasick "github.com/petar-dambovaliev/aho-corasick"
 
 	"github.com/greysquirr3l/wordfence-go/internal/intel"
 	"github.com/greysquirr3l/wordfence-go/internal/logging"
@@ -33,9 +34,9 @@ type MatchResult struct {
 	Position      int
 }
 
-// CompiledPattern represents a compiled regex pattern
+// CompiledPattern represents a compiled regex pattern using multi-layer engine
 type CompiledPattern struct {
-	Pattern  *regexp2.Regexp
+	Pattern  *CompiledRegex
 	Original string
 }
 
@@ -51,6 +52,8 @@ type CompiledSignature struct {
 type CompiledCommonString struct {
 	CommonString *intel.CommonString
 	Pattern      *CompiledPattern
+	// Index in the Aho-Corasick automaton (for fast lookup)
+	ACIndex int
 }
 
 // Matcher compiles and matches signatures against content
@@ -63,6 +66,15 @@ type Matcher struct {
 	logger          *logging.Logger
 	mu              sync.RWMutex
 	prepared        bool
+
+	// Aho-Corasick automaton for fast common string pre-filtering
+	// Single O(n) pass identifies ALL matching common strings
+	acAutomaton    *ahocorasick.AhoCorasick
+	acStringToIdx  map[string]int // Map common string -> index in commonStrings
+	commonStrTexts []string       // Raw strings for AC automaton
+
+	// Pool for MatchContext objects to reduce GC pressure
+	contextPool sync.Pool
 }
 
 // MatcherOption configures a Matcher
@@ -92,11 +104,23 @@ func WithMatcherLogger(logger *logging.Logger) MatcherOption {
 // NewMatcher creates a new Matcher for the given signature set
 func NewMatcher(sigSet *intel.SignatureSet, opts ...MatcherOption) *Matcher {
 	m := &Matcher{
-		signatures:    make(map[int]*CompiledSignature),
-		commonStrings: make([]*CompiledCommonString, 0),
-		timeout:       DefaultMatchTimeout,
-		matchAll:      false,
-		logger:        logging.New(logging.LevelInfo),
+		signatures:     make(map[int]*CompiledSignature),
+		commonStrings:  make([]*CompiledCommonString, 0),
+		timeout:        DefaultMatchTimeout,
+		matchAll:       false,
+		logger:         logging.New(logging.LevelInfo),
+		acStringToIdx:  make(map[string]int),
+		commonStrTexts: make([]string, 0),
+	}
+
+	// Initialize context pool
+	m.contextPool = sync.Pool{
+		New: func() interface{} {
+			return &MatchContext{
+				matches:  make(map[int]*MatchResult, 16),
+				timeouts: make(map[int]bool, 4),
+			}
+		},
 	}
 
 	for _, opt := range opts {
@@ -114,13 +138,22 @@ func (m *Matcher) compileSignatures(sigSet *intel.SignatureSet) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Compile common strings
-	for _, cs := range sigSet.CommonStrings {
+	// Compile common strings and build Aho-Corasick automaton
+	acPatterns := make([]string, 0, len(sigSet.CommonStrings))
+
+	for idx, cs := range sigSet.CommonStrings {
 		compiled := &CompiledCommonString{
 			CommonString: cs,
+			ACIndex:      idx,
 		}
 
-		pattern, err := m.compilePattern(regexp2.Escape(cs.String))
+		// Store raw string for Aho-Corasick
+		acPatterns = append(acPatterns, cs.String)
+		m.acStringToIdx[cs.String] = idx
+		m.commonStrTexts = append(m.commonStrTexts, cs.String)
+
+		// Also compile as regex pattern for fallback (escaped for literal matching)
+		pattern, err := m.compilePattern(escapeRegex(cs.String))
 		if err != nil {
 			m.logger.Debug("Failed to compile common string pattern: %v", err)
 		} else {
@@ -130,7 +163,19 @@ func (m *Matcher) compileSignatures(sigSet *intel.SignatureSet) {
 		m.commonStrings = append(m.commonStrings, compiled)
 	}
 
-	// Compile signatures
+	// Build Aho-Corasick automaton for O(n) common string matching
+	if len(acPatterns) > 0 {
+		builder := ahocorasick.NewAhoCorasickBuilder(ahocorasick.Opts{
+			AsciiCaseInsensitive: false,
+			MatchOnlyWholeWords:  false,
+			MatchKind:            ahocorasick.LeftMostLongestMatch,
+			DFA:                  true, // DFA mode for O(N) runtime
+		})
+		ac := builder.Build(acPatterns)
+		m.acAutomaton = &ac
+	}
+
+	// Compile signatures using multi-layer regex engine
 	for id, sig := range sigSet.Signatures {
 		compiled := &CompiledSignature{
 			Signature:     sig,
@@ -156,21 +201,26 @@ func (m *Matcher) compileSignatures(sigSet *intel.SignatureSet) {
 	m.prepared = true
 }
 
-// compilePattern compiles a PCRE pattern using regexp2
-func (m *Matcher) compilePattern(pattern string) (*CompiledPattern, error) {
-	// regexp2 options for PCRE compatibility
-	opts := regexp2.Multiline | regexp2.Singleline
+// escapeRegex escapes special regex characters for literal matching
+func escapeRegex(s string) string {
+	special := []string{"\\", ".", "+", "*", "?", "(", ")", "[", "]", "{", "}", "|", "^", "$"}
+	result := s
+	for _, ch := range special {
+		result = strings.ReplaceAll(result, ch, "\\"+ch)
+	}
+	return result
+}
 
-	re, err := regexp2.Compile(pattern, regexp2.RegexOptions(opts))
+// compilePattern compiles a pattern using the multi-layer regex engine
+// (go-re2 for ~99.8% of patterns, regexp2/PCRE fallback for the rest)
+func (m *Matcher) compilePattern(pattern string) (*CompiledPattern, error) {
+	compiled, err := CompileRegex(pattern, m.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile pattern: %w", err)
 	}
 
-	// Set match timeout
-	re.MatchTimeout = m.timeout
-
 	return &CompiledPattern{
-		Pattern:  re,
+		Pattern:  compiled,
 		Original: pattern,
 	}, nil
 }
@@ -184,14 +234,41 @@ type MatchContext struct {
 	mu                 sync.Mutex
 }
 
-// NewMatchContext creates a new match context
+// NewMatchContext creates a new match context from the pool
 func (m *Matcher) NewMatchContext() *MatchContext {
-	return &MatchContext{
-		matcher:            m,
-		matches:            make(map[int]*MatchResult),
-		timeouts:           make(map[int]bool),
-		commonStringStates: make([]bool, len(m.commonStrings)),
+	mc := m.contextPool.Get().(*MatchContext)
+	mc.matcher = m
+
+	// Clear and resize maps
+	clear(mc.matches)
+	clear(mc.timeouts)
+
+	// Resize commonStringStates if needed, then clear
+	if cap(mc.commonStringStates) < len(m.commonStrings) {
+		mc.commonStringStates = make([]bool, len(m.commonStrings))
+	} else {
+		mc.commonStringStates = mc.commonStringStates[:len(m.commonStrings)]
+		clear(mc.commonStringStates)
 	}
+
+	return mc
+}
+
+// Release returns the MatchContext to the pool for reuse
+// Call this when done with the context to reduce GC pressure
+func (mc *MatchContext) Release() {
+	if mc == nil || mc.matcher == nil {
+		return
+	}
+
+	// Clear references to allow GC of match results
+	clear(mc.matches)
+	clear(mc.timeouts)
+
+	matcher := mc.matcher
+	mc.matcher = nil
+
+	matcher.contextPool.Put(mc)
 }
 
 // Match matches the content against all signatures
@@ -204,10 +281,14 @@ func (mc *MatchContext) MatchChunk(ctx context.Context, content []byte, isStart 
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
-	contentStr := string(content)
+	// Zero-copy conversion: content must remain immutable during matching
+	// This eliminates memory allocation for the entire file content
+	// nolint:gosec // G103: Intentional unsafe for zero-copy performance (content is immutable during match)
+	contentStr := unsafe.String(unsafe.SliceData(content), len(content))
 
-	// Check common strings first to narrow down possible signatures
-	possibleSigs := mc.checkCommonStrings(contentStr)
+	// Use Aho-Corasick for O(n) common string pre-filtering
+	// Single pass identifies ALL matching common strings
+	possibleSigs := mc.checkCommonStringsAC(content)
 
 	// Match signatures without common strings
 	for _, sig := range mc.matcher.noCommonStrSigs {
@@ -238,8 +319,60 @@ func (mc *MatchContext) MatchChunk(ctx context.Context, content []byte, isStart 
 	return nil
 }
 
-// checkCommonStrings checks which common strings match and returns possible signatures
-func (mc *MatchContext) checkCommonStrings(content string) []*CompiledSignature {
+// checkCommonStringsAC uses Aho-Corasick for O(n) common string matching
+// This replaces the O(n*m) sequential bytes.Contains approach
+func (mc *MatchContext) checkCommonStringsAC(content []byte) []*CompiledSignature {
+	commonStringCounts := make(map[int]int)
+
+	// Use Aho-Corasick if available (single O(n) pass for ALL patterns)
+	if mc.matcher.acAutomaton != nil {
+		// Zero-copy string conversion for AC matching
+		// nolint:gosec // G103: Intentional unsafe for zero-copy performance (content is immutable during match)
+		contentStr := unsafe.String(unsafe.SliceData(content), len(content))
+
+		// Find all matches in a single pass
+		iter := mc.matcher.acAutomaton.Iter(contentStr)
+		for {
+			match := iter.Next()
+			if match == nil {
+				break
+			}
+
+			idx := match.Pattern()
+			if idx < len(mc.commonStringStates) && !mc.commonStringStates[idx] {
+				mc.commonStringStates[idx] = true
+				cs := mc.matcher.commonStrings[idx]
+				for _, sigID := range cs.CommonString.SignatureIDs {
+					if _, ok := mc.matches[sigID]; !ok {
+						commonStringCounts[sigID]++
+					}
+				}
+			}
+		}
+	} else {
+		// Fallback to regex-based matching (slower)
+		// nolint:gosec // G103: Intentional unsafe for zero-copy performance (content is immutable during match)
+		contentStr := unsafe.String(unsafe.SliceData(content), len(content))
+		return mc.checkCommonStringsRegex(contentStr)
+	}
+
+	// Find signatures where all common strings matched
+	var possibleSigs []*CompiledSignature
+	for sigID, count := range commonStringCounts {
+		sig, ok := mc.matcher.signatures[sigID]
+		if !ok {
+			continue
+		}
+		if count == sig.Signature.GetCommonStringCount() {
+			possibleSigs = append(possibleSigs, sig)
+		}
+	}
+
+	return possibleSigs
+}
+
+// checkCommonStringsRegex is the fallback regex-based common string check
+func (mc *MatchContext) checkCommonStringsRegex(content string) []*CompiledSignature {
 	commonStringCounts := make(map[int]int)
 
 	for idx, cs := range mc.matcher.commonStrings {
@@ -317,7 +450,7 @@ func (mc *MatchContext) matchSignature(sig *CompiledSignature, content string, i
 	if match != nil {
 		mc.matches[sig.Signature.ID] = &MatchResult{
 			SignatureID:   sig.Signature.ID,
-			MatchedString: match.String(),
+			MatchedString: match.Value,
 			Position:      match.Index,
 		}
 		return true

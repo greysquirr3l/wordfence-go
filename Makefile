@@ -7,7 +7,7 @@ LDFLAGS := -ldflags "-X github.com/greysquirr3l/wordfence-go/internal/version.Gi
 EMBEDDED_TAGS := -tags embedded_rules
 
 .PHONY: all build build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-all test lint fmt vet clean deps
-.PHONY: build-embedded build-embedded-linux-amd64 build-embedded-linux-arm64 fetch-rules
+.PHONY: build-embedded build-embedded-linux-amd64 build-embedded-linux-arm64 fetch-rules benchmark benchmark-cpu benchmark-mem
 
 all: build
 
@@ -41,6 +41,22 @@ test:
 # Run tests with verbose output
 test-v:
 	go test -race -cover -v ./...
+
+# Run benchmarks
+benchmark:
+	go test -bench=. -benchmem ./internal/scanner/...
+
+# Run benchmarks with CPU profile
+benchmark-cpu:
+	go test -bench=. -benchmem -cpuprofile=cpu.prof ./internal/scanner/...
+	@echo "CPU profile written to cpu.prof"
+	@echo "View with: go tool pprof cpu.prof"
+
+# Run benchmarks with memory profile
+benchmark-mem:
+	go test -bench=. -benchmem -memprofile=mem.prof ./internal/scanner/...
+	@echo "Memory profile written to mem.prof"
+	@echo "View with: go tool pprof mem.prof"
 
 # Run linter (requires golangci-lint)
 lint:
